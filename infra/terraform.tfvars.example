@@ -1,0 +1,6 @@
+resource_group_name    = "rg-insurance-lakehouse"
+location               = "eastus2"
+workspace_name         = "dbx-insurance-lakehouse"
+storage_account_name   = "stinsurancelakehouse01" # must be globally unique
+storage_container_name = "lakehouse"
+catalog_name            = "insurance_lakehouse"
