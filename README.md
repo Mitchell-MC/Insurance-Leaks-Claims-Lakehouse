@@ -6,9 +6,10 @@ leakage risk, published through a Power BI executive dashboard.
 
 ## Status
 
-Phase 0 (environment, account & infra bootstrap) in progress. See
-`docs/` for the project charter and KPI definitions once Phase 1 lands, and
-`infra/README.md` for Terraform/Databricks workspace setup.
+Phase 0 (environment, account & infra bootstrap) scaffolded — Terraform
+apply and GitHub remote still pending, see `infra/README.md`. Phase 1
+(business framing & KPI scoping) complete, see `docs/charter.md`,
+`docs/kpi_definitions.md`, and `docs/scoping_memo.md`.
 
 ## Repository layout
 
