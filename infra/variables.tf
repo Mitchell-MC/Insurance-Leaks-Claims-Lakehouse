@@ -59,6 +59,11 @@ variable "cluster_node_type" {
   default     = "Standard_DS3_v2"
 }
 
+variable "cluster_single_user_name" {
+  description = "Databricks user principal that owns the SINGLE_USER verification cluster (usually your Entra ID UPN, e.g. you@yourtenant.onmicrosoft.com). Required because Unity Catalog workspaces reject the legacy NO_ISOLATION single-node mode."
+  type        = string
+}
+
 variable "cluster_spark_version" {
   description = "Databricks runtime version for the verification cluster."
   type        = string

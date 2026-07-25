@@ -29,6 +29,12 @@ infra/**/terraform.tfstate
 infra/**/terraform.tfstate.backup
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
+# Saved plan files embed resolved resource attributes -- never commit them.
+infra/**/*.tfplan
+infra/**/tfplan*.binary
+# Local-state backend override used for laptop-only applies (see the file's
+# own comment); a shared deployment must use the azurerm backend instead.
+infra/**/backend_override.tf
 
 # Power BI
 *.pbix.bak
