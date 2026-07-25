@@ -7,6 +7,9 @@ leakage risk, published through a Power BI executive dashboard.
 See [docs/interview_walkthrough.md](docs/interview_walkthrough.md) for a
 5-minute guided tour, or [docs/architecture.md](docs/architecture.md) for
 the full pipeline diagram.
+[docs/architecture_ideal_vs_actual.md](docs/architecture_ideal_vs_actual.md)
+contrasts the target architecture with what is actually built, and why each
+divergence exists.
 
 ## Status
 
