@@ -44,3 +44,21 @@ variable "cluster_spark_version" {
   type        = string
   default     = "14.3.x-scala2.12"
 }
+
+variable "lakehouse_wheel_path" {
+  description = "Workspace/DBFS/Volumes path to the built `lakehouse` wheel, published by CI (see .github/workflows/ci.yml) ahead of `terraform apply`."
+  type        = string
+  default     = "dbfs:/FileStore/wheels/lakehouse-0.1.0-py3-none-any.whl"
+}
+
+variable "job_failure_notification_emails" {
+  description = "Email addresses notified when a lakehouse job task fails."
+  type        = list(string)
+  default     = []
+}
+
+variable "job_failure_webhook_id" {
+  description = "Optional Databricks notification-destination webhook ID for job failures. Leave empty to disable."
+  type        = string
+  default     = ""
+}

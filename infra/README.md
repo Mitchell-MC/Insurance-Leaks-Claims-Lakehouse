@@ -1,8 +1,10 @@
 # infra/ — Terraform bootstrap
 
 Provisions the Azure resource group, Azure Databricks workspace (Premium SKU,
-required for Unity Catalog), ADLS Gen2 storage for Delta tables, and the
-`bronze`/`silver`/`gold` Unity Catalog schemas.
+required for Unity Catalog), ADLS Gen2 storage for Delta tables, the
+`bronze`/`silver`/`gold` Unity Catalog schemas, and the two scheduled
+Databricks Jobs (`jobs.tf`) that run the pipeline — see
+`../docs/batch_vs_streaming_memo.md` for why there are two.
 
 ## Prerequisites (manual, one-time)
 
@@ -20,6 +22,16 @@ required for Unity Catalog), ADLS Gen2 storage for Delta tables, and the
    az group create -n rg-tfstate -l eastus2
    az storage account create -n sttfstatelakehouse -g rg-tfstate -l eastus2 --sku Standard_LRS
    az storage container create -n tfstate --account-name sttfstatelakehouse
+   ```
+
+5. `jobs.tf`'s tasks run the `lakehouse` console script from a built wheel,
+   not from workspace-synced source, so build and upload it before
+   `terraform apply`, and point `lakehouse_wheel_path` (terraform.tfvars) at
+   wherever it lands:
+
+   ```bash
+   uv build --wheel
+   databricks fs cp dist/lakehouse-0.1.0-py3-none-any.whl dbfs:/FileStore/wheels/ --overwrite
    ```
 
 ## Usage
