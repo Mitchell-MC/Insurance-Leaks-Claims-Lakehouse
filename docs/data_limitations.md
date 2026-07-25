@@ -54,6 +54,43 @@ Tracked in [productionization_next_steps.md](productionization_next_steps.md)
 (Phase 8): a real complaint-data source needs either a data-sharing
 agreement with a state DOI/OIR, or a commercial data vendor — not a scraper.
 
+## Silver DQ checks are observational, not gating
+
+**Status: open — accepted for this phase.**
+
+`BaseSilverTransformer.run()` (`silver/base_transformer.py`) runs each
+transformer's `dq_checks()` and records the pass/fail counts in the
+`_dq_metadata` struct it attaches to every Silver row, but it always writes
+Silver regardless of the result, and nothing in `orchestration/` reads
+`checks_failed` to block, quarantine, or alert. A failed null-geography or
+duplicate-key check is therefore *visible after the fact* (queryable from
+`_dq_metadata`) but has **zero effect on the pipeline** — bad rows still
+reach Gold.
+
+This is a deliberate portfolio-scope tradeoff, not an oversight: gating
+requires deciding quarantine-vs-fail-the-run semantics per check and a place
+to route rejected rows. Closing it means having the stage runners inspect
+`_dq_metadata` and fail (or divert to a `silver_rejects` table) on
+critical-check failure.
+
+## FEMA and geography Silver transformers detect duplicates but don't drop them
+
+**Status: open — accepted for this phase.**
+
+`silver/features/noaa_storm_events/feature.py` both checks for and drops
+duplicates (`dropDuplicates(["_DEDUP_KEY"])`). The FEMA and geography
+transformers only *check*:
+`check_no_duplicate_keys(df, ["disasterNumber", "designatedArea"])` and
+`check_no_duplicate_keys(df, ["GEOID"])` respectively. Combined with the
+non-gating behavior above, a duplicate from (for example) an OpenFEMA
+pagination retry would pass through to Silver and Gold, inflating
+`historical_declaration_frequency` and KPI-3's declaration counts, with only
+a `_dq_metadata` counter recording that it happened.
+
+Both sources are expected to be naturally unique on those keys, which is why
+this hasn't bitten in practice — but "expected unique" plus "check that
+doesn't gate" is not the same as enforced.
+
 ## NOAA Storm Events schema drift (1996-present)
 
 NOAA's column set has changed across the ~30 yearly bulk files (e.g. some

@@ -12,14 +12,16 @@ only the Gold-layer views (`reporting_views.sql`) and this guide.
 1. Power BI Desktop → Get Data → Databricks.
 2. Server hostname / HTTP path: from the SQL warehouse provisioned by
    `infra/sql_warehouse.tf` (Databricks workspace → SQL Warehouses → Connection details).
-3. Connect to the `gold` schema and import the six views in
+3. Connect to the `gold` schema and import the five views in
    `docs/reporting_views.sql` (`v_elevated_pressure_regions`,
    `v_complaint_trend_acceleration`, `v_catastrophe_pressure_map`,
-   `v_activity_trend_over_time`, `v_roi_summary`), plus `gold.dim_geography`
-   and `gold.dim_date` for slicers.
-4. Use DirectQuery (not Import) so the dashboard reflects the alerts job's
-   15-minute Bronze refresh without a separate Power BI refresh schedule —
-   see `docs/batch_vs_streaming_memo.md` for why alert freshness matters here.
+   `v_activity_trend_over_time`, `v_roi_summary`), plus
+   `gold.dim_geography_state` and `gold.dim_date` for slicers.
+4. Use DirectQuery (not Import) so the dashboard picks up each Gold refresh
+   without a separate Power BI refresh schedule. Note this does *not* make
+   the dashboard 15-minute-fresh: these views read Gold tables, which
+   recompute daily — see the "Refresh cadence" section below and
+   `docs/batch_vs_streaming_memo.md`.
 
 ## Page 1: Regional Risk Overview
 
@@ -32,18 +34,21 @@ only the Gold-layer views (`reporting_views.sql`) and this guide.
     that caveat.
   - Estimated avoidable backlog exposure, from `v_roi_summary` — see
     `docs/roi_assumptions.md` for exactly how this number is computed.
-- **Map**, sourced from `v_catastrophe_pressure_map`: state/county filled
-  map colored by `claims_surge_risk`, sized by `total_damage_property_usd`.
-  Click-through filters the page to that region.
+- **Map**, sourced from `v_catastrophe_pressure_map`: state filled map
+  colored by `claims_surge_risk`, sized by `total_damage_property_usd`.
+  Click-through filters the page to that region. Note this is a state-level
+  map: every KPI is defined at region (state) grain, so there is no
+  county-level pressure score to shade — see `docs/interview_walkthrough.md`'s
+  "Modeling approach".
 - **Drill-through page**: matched storm events and declaration history for
   the clicked region (`gold.fact_catastrophe_event` filtered by
-  `geography_key`).
+  `state_geography_key`).
 
 ## Page 2: Trends Over Time
 
 - Sourced from `v_activity_trend_over_time`: a line chart with
   `avg_claims_surge_risk`, `declaration_count`, and `complaint_count` over
-  `date`, one line per selected state (slicer on `dim_geography.state`).
+  `date`, one line per selected state (slicer on `dim_geography_state.state`).
 - Read this page as: does complaint volume follow catastrophe pressure with
   a lag, or has it decoupled? A widening gap between the pressure line and
   the complaint line (pressure rising, complaints flat) is the leading-

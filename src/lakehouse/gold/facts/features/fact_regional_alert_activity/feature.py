@@ -10,7 +10,7 @@ def build_fact_regional_alert_activity(
     pressure_score_df: DataFrame,
     as_of_date: date,
     dim_date: DataFrame,
-    dim_geography: DataFrame,
+    dim_geography_state: DataFrame,
 ) -> DataFrame:
     """Builds fact_regional_alert_activity for a single as-of-date snapshot.
 
@@ -19,14 +19,17 @@ def build_fact_regional_alert_activity(
             `processing.features.catastrophe_pressure_score`).
         as_of_date (date): Snapshot date this run represents.
         dim_date (DataFrame): Gold `dim_date`.
-        dim_geography (DataFrame): Gold `dim_geography`.
+        dim_geography_state (DataFrame): Gold `dim_geography_state`. Reason:
+            this fact is region (state) grain; joining the county-grain
+            `dim_geography` on `state` would fan out one region into one row
+            per county in that state.
 
     Returns:
-        DataFrame: One row per region with `date_key`, `geography_key`, and
-            `claims_surge_risk` (KPI 1).
+        DataFrame: One row per region with `date_key`, `state_geography_key`,
+            and `claims_surge_risk` (KPI 1).
     """
     dated = pressure_score_df.withColumn("as_of_date", F.lit(as_of_date))
     joined = dated.join(dim_date, dated["as_of_date"] == dim_date["date"], "left").join(
-        dim_geography, dated["REGION"] == dim_geography["state"], "left"
+        dim_geography_state, dated["REGION"] == dim_geography_state["state"], "left"
     )
-    return joined.select("date_key", "geography_key", "claims_surge_risk")
+    return joined.select("date_key", "state_geography_key", "claims_surge_risk")

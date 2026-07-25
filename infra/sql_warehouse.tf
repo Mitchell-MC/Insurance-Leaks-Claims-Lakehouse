@@ -4,9 +4,9 @@
 # appropriate for this portfolio project's query volume.
 
 resource "databricks_sql_endpoint" "power_bi" {
-  name             = "lakehouse-power-bi"
-  cluster_size     = "2X-Small"
-  auto_stop_mins   = 10
+  name                      = "lakehouse-power-bi"
+  cluster_size              = "2X-Small"
+  auto_stop_mins            = 10
   enable_serverless_compute = true
 
   tags {

@@ -9,6 +9,9 @@ from lakehouse.gold.dimensions.features.dim_alert_status.feature import build_di
 from lakehouse.gold.dimensions.features.dim_date.feature import build_dim_date
 from lakehouse.gold.dimensions.features.dim_event_type.feature import build_dim_event_type
 from lakehouse.gold.dimensions.features.dim_geography.feature import build_dim_geography
+from lakehouse.gold.dimensions.features.dim_geography_state.feature import (
+    build_dim_geography_state,
+)
 from lakehouse.gold.facts.features.fact_catastrophe_event.feature import (
     build_fact_catastrophe_event,
 )
@@ -88,15 +91,16 @@ def run_gold_stage(
     with log_stage_run("gold.dimensions"):
         dim_date = build_dim_date(spark, dim_date_start, dim_date_end)
         dim_geography = build_dim_geography(geography_silver_df)
+        dim_geography_state = build_dim_geography_state(geography_silver_df)
         dim_event_type = build_dim_event_type(noaa_silver_df)
         dim_alert_status = build_dim_alert_status(nws_bronze_df)
 
     with log_stage_run("gold.facts"):
         fact_catastrophe_event = build_fact_catastrophe_event(
-            enriched_events_df, fema_silver_df, dim_date, dim_geography
+            enriched_events_df, fema_silver_df, dim_date, dim_geography_state
         )
         fact_regional_alert_activity = build_fact_regional_alert_activity(
-            pressure_score_df, as_of_date, dim_date, dim_geography
+            pressure_score_df, as_of_date, dim_date, dim_geography_state
         )
         fact_complaint_trend = build_fact_complaint_trend(spark)
 
@@ -110,6 +114,7 @@ def run_gold_stage(
     return {
         "dim_date": dim_date,
         "dim_geography": dim_geography,
+        "dim_geography_state": dim_geography_state,
         "dim_event_type": dim_event_type,
         "dim_alert_status": dim_alert_status,
         "fact_catastrophe_event": fact_catastrophe_event,

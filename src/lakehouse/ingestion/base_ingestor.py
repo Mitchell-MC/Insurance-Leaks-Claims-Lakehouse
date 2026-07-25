@@ -4,6 +4,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, date, datetime
+from typing import Any
 
 import requests
 from pydantic import BaseModel
@@ -98,12 +99,12 @@ class BaseIngestor(ABC):
         path = self._settings.bronze_table_path(self.bronze_table_name)
         df.write.format("delta").mode("append").save(path)
 
-    def _make_request(self, url: str, **kwargs: object) -> requests.Response:
+    def _make_request(self, url: str, **kwargs: Any) -> requests.Response:
         """Issues a GET request with exponential-backoff retry.
 
         Args:
             url (str): Request URL.
-            **kwargs (object): Extra kwargs forwarded to `requests.get`
+            **kwargs (Any): Extra kwargs forwarded to `requests.get`
                 (e.g. `params`, `headers`).
 
         Returns:

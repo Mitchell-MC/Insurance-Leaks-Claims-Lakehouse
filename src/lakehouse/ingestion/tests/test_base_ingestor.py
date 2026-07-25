@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import DataFrame, Row, SparkSession
 
 from lakehouse.config.config import LakehouseSettings
 from lakehouse.ingestion.base_ingestor import BaseIngestor
@@ -19,7 +19,7 @@ class _DummyIngestor(BaseIngestor):
         super().__init__(settings, spark)
         self._rows = rows
 
-    def fetch(self):
+    def fetch(self) -> DataFrame:
         return self._spark.createDataFrame(self._rows)
 
 

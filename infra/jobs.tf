@@ -21,11 +21,11 @@ resource "databricks_job" "lakehouse_batch" {
 
   schedule {
     quartz_cron_expression = "0 0 6 * * ?" # 06:00 UTC daily
-    timezone_id             = "UTC"
+    timezone_id            = "UTC"
   }
 
   task {
-    task_key             = "ingest_historical"
+    task_key            = "ingest_historical"
     existing_cluster_id = databricks_cluster.verification.cluster_id
     library {
       whl = var.lakehouse_wheel_path
@@ -112,11 +112,11 @@ resource "databricks_job" "lakehouse_alerts" {
 
   schedule {
     quartz_cron_expression = "0 */15 * * * ?" # every 15 minutes
-    timezone_id             = "UTC"
+    timezone_id            = "UTC"
   }
 
   task {
-    task_key             = "ingest_alerts"
+    task_key            = "ingest_alerts"
     existing_cluster_id = databricks_cluster.verification.cluster_id
     library {
       whl = var.lakehouse_wheel_path

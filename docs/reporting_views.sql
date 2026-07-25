@@ -13,11 +13,10 @@
 CREATE OR REPLACE VIEW gold.v_elevated_pressure_regions AS
 SELECT
     g.state,
-    g.county_name,
     f.claims_surge_risk,
     d.date
 FROM gold.fact_regional_alert_activity f
-JOIN gold.dim_geography g ON f.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON f.state_geography_key = g.state_geography_key
 JOIN gold.dim_date d ON f.date_key = d.date_key
 WHERE f.claims_surge_risk >= 0.7  -- Reason: top ~30% of the [0,1] normalized
                                     -- range, a simple fixed threshold chosen
@@ -37,32 +36,40 @@ ORDER BY f.claims_surge_risk DESC;
 CREATE OR REPLACE VIEW gold.v_complaint_trend_acceleration AS
 SELECT
     g.state,
-    g.county_name,
     d.date,
     c.complaint_count,
     c.complaint_rate_trend
 FROM gold.fact_complaint_trend c
-JOIN gold.dim_geography g ON c.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON c.state_geography_key = g.state_geography_key
 JOIN gold.dim_date d ON c.date_key = d.date_key
 WHERE c.complaint_rate_trend > 0
 ORDER BY c.complaint_rate_trend DESC;
 
 -- ============================================================================
 -- View: v_catastrophe_pressure_map
--- Map: catastrophe pressure by state/county, drill-through to event/complaint context
+-- Map: catastrophe pressure by state, with aggregated event context.
+-- Reason: both facts are state-grain, so the declaration-side measures are
+-- pre-aggregated in a subquery before joining. Joining the two facts row-to-row
+-- would multiply each region's claims_surge_risk by its declaration count.
 -- ============================================================================
 CREATE OR REPLACE VIEW gold.v_catastrophe_pressure_map AS
 SELECT
     g.state,
-    g.county_name,
-    g.county_geoid,
     f.claims_surge_risk,
     e.matched_storm_event_count,
     e.total_damage_property_usd,
-    e.days_to_declaration
+    e.avg_days_to_declaration
 FROM gold.fact_regional_alert_activity f
-JOIN gold.dim_geography g ON f.geography_key = g.geography_key
-LEFT JOIN gold.fact_catastrophe_event e ON e.geography_key = g.geography_key;
+JOIN gold.dim_geography_state g ON f.state_geography_key = g.state_geography_key
+LEFT JOIN (
+    SELECT
+        state_geography_key,
+        SUM(matched_storm_event_count) AS matched_storm_event_count,
+        SUM(total_damage_property_usd) AS total_damage_property_usd,
+        AVG(days_to_declaration) AS avg_days_to_declaration
+    FROM gold.fact_catastrophe_event
+    GROUP BY state_geography_key
+) e ON e.state_geography_key = f.state_geography_key;
 
 -- ============================================================================
 -- View: v_activity_trend_over_time
@@ -77,11 +84,11 @@ SELECT
     COALESCE(SUM(c.complaint_count), 0) AS complaint_count
 FROM gold.dim_date d
 JOIN gold.fact_regional_alert_activity f ON f.date_key = d.date_key
-JOIN gold.dim_geography g ON f.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON f.state_geography_key = g.state_geography_key
 LEFT JOIN gold.fact_catastrophe_event e
-    ON e.date_key = d.date_key AND e.geography_key = g.geography_key
+    ON e.date_key = d.date_key AND e.state_geography_key = g.state_geography_key
 LEFT JOIN gold.fact_complaint_trend c
-    ON c.date_key = d.date_key AND c.geography_key = g.geography_key
+    ON c.date_key = d.date_key AND c.state_geography_key = g.state_geography_key
 GROUP BY d.date, g.state
 ORDER BY d.date;
 
@@ -98,5 +105,5 @@ SELECT
     COUNT(DISTINCT e.disasterNumber) AS declaration_count,
     SUM(e.total_damage_property_usd) AS total_damage_property_usd
 FROM gold.fact_catastrophe_event e
-JOIN gold.dim_geography g ON e.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON e.state_geography_key = g.state_geography_key
 GROUP BY g.state;

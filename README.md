@@ -26,8 +26,10 @@ All 8 phases of the build are complete:
   (region/date-window join, rolling 7d/30d window metrics,
   `claims_surge_risk` scoring), benchmarked in
   `docs/partitioning_benchmark_memo.md`.
-- **Phase 5** — Gold star schema: `src/lakehouse/gold/` (4 dimensions, 3
+- **Phase 5** — Gold star schema: `src/lakehouse/gold/` (5 dimensions, 3
   facts, `leakage_exposure_proxy`), validated by `docs/kpi_validation_queries.sql`.
+  State-grain facts key off `dim_geography_state`; see
+  `docs/interview_walkthrough.md`'s "Modeling approach" for why.
 - **Phase 6** — orchestration: `src/lakehouse/orchestration/` +
   `src/lakehouse/main.py` (CLI entry point) + `infra/jobs.tf` (two
   independently-scheduled Databricks Jobs), reasoning in

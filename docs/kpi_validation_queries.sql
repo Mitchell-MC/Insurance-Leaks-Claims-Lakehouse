@@ -18,11 +18,10 @@
 -- ============================================================================
 SELECT
     g.state,
-    g.county_name,
     d.date,
     f.claims_surge_risk
 FROM gold.fact_regional_alert_activity f
-JOIN gold.dim_geography g ON f.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON f.state_geography_key = g.state_geography_key
 JOIN gold.dim_date d ON f.date_key = d.date_key
 ORDER BY f.claims_surge_risk DESC;
 
@@ -36,12 +35,11 @@ ORDER BY f.claims_surge_risk DESC;
 -- ============================================================================
 SELECT
     g.state,
-    g.county_name,
     d.date,
     c.complaint_count,
     c.complaint_rate_trend
 FROM gold.fact_complaint_trend c
-JOIN gold.dim_geography g ON c.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON c.state_geography_key = g.state_geography_key
 JOIN gold.dim_date d ON c.date_key = d.date_key
 ORDER BY c.complaint_rate_trend DESC;
 
@@ -54,9 +52,9 @@ SELECT
     e.incidentType,
     g.state,
     AVG(e.days_to_declaration) AS avg_days_event_to_declaration,
-    COUNT(*) AS declaration_count
+    COUNT(DISTINCT e.disasterNumber) AS declaration_count
 FROM gold.fact_catastrophe_event e
-JOIN gold.dim_geography g ON e.geography_key = g.geography_key
+JOIN gold.dim_geography_state g ON e.state_geography_key = g.state_geography_key
 GROUP BY e.incidentType, g.state
 ORDER BY avg_days_event_to_declaration DESC;
 
@@ -68,18 +66,17 @@ ORDER BY avg_days_event_to_declaration DESC;
 -- can be validated without re-running the pipeline.
 -- ============================================================================
 WITH surge_risk AS (
-    SELECT geography_key, AVG(claims_surge_risk) AS avg_claims_surge_risk
+    SELECT state_geography_key, AVG(claims_surge_risk) AS avg_claims_surge_risk
     FROM gold.fact_regional_alert_activity
-    GROUP BY geography_key
+    GROUP BY state_geography_key
 ),
 declaration_lag AS (
-    SELECT geography_key, AVG(days_to_declaration) AS avg_days_event_to_declaration
+    SELECT state_geography_key, AVG(days_to_declaration) AS avg_days_event_to_declaration
     FROM gold.fact_catastrophe_event
-    GROUP BY geography_key
+    GROUP BY state_geography_key
 )
 SELECT
     g.state,
-    g.county_name,
     s.avg_claims_surge_risk,
     l.avg_days_event_to_declaration,
     -- Full z-score combination (including the complaint-trend proxy term)
@@ -91,7 +88,7 @@ SELECT
     (l.avg_days_event_to_declaration - AVG(l.avg_days_event_to_declaration) OVER ())
         / NULLIF(STDDEV(l.avg_days_event_to_declaration) OVER (), 0)
         AS partial_leakage_exposure_proxy
-FROM gold.dim_geography g
-JOIN surge_risk s ON g.geography_key = s.geography_key
-JOIN declaration_lag l ON g.geography_key = l.geography_key
+FROM gold.dim_geography_state g
+JOIN surge_risk s ON g.state_geography_key = s.state_geography_key
+JOIN declaration_lag l ON g.state_geography_key = l.state_geography_key
 ORDER BY partial_leakage_exposure_proxy DESC;

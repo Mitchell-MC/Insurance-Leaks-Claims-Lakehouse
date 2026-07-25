@@ -14,7 +14,7 @@ def build_fact_catastrophe_event(
     enriched_events_df: DataFrame,
     fema_df: DataFrame,
     dim_date: DataFrame,
-    dim_geography: DataFrame,
+    dim_geography_state: DataFrame,
 ) -> DataFrame:
     """Builds fact_catastrophe_event at one-row-per-declaration grain.
 
@@ -25,11 +25,14 @@ def build_fact_catastrophe_event(
             `processing.features.rolling_event_intensity`).
         fema_df (DataFrame): Silver FEMA declarations.
         dim_date (DataFrame): Gold `dim_date`.
-        dim_geography (DataFrame): Gold `dim_geography`.
+        dim_geography_state (DataFrame): Gold `dim_geography_state`. Reason:
+            this fact is declaration-grain (state-level); joining the
+            county-grain `dim_geography` on `state` would fan out one
+            declaration into one row per county in that state.
 
     Returns:
         DataFrame: One row per `disasterNumber` with `date_key` (declaration
-            date), `geography_key`, `incidentType`, `days_to_declaration`
+            date), `state_geography_key`, `incidentType`, `days_to_declaration`
             (KPI 3), and aggregated matched-storm-event measures.
     """
     event_aggregates = (
@@ -47,12 +50,16 @@ def build_fact_catastrophe_event(
     joined = (
         declarations.join(event_aggregates, "disasterNumber", "left")
         .join(dim_date, declarations["declarationDate"] == dim_date["date"], "left")
-        .join(dim_geography, declarations["state"] == dim_geography["state"], "left")
+        .join(
+            dim_geography_state,
+            declarations["state"] == dim_geography_state["state"],
+            "left",
+        )
     )
     return joined.select(
         F.col("disasterNumber"),
         F.col("date_key"),
-        F.col("geography_key"),
+        F.col("state_geography_key"),
         F.col("incidentType"),
         F.col("days_to_declaration"),
         F.coalesce(F.col("matched_storm_event_count"), F.lit(0)).alias("matched_storm_event_count"),

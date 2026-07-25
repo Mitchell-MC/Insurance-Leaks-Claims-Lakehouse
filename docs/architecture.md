@@ -32,7 +32,7 @@ flowchart TB
     end
 
     subgraph Gold["Gold (src/lakehouse/gold/) — star schema"]
-        DIMS[("dim_date, dim_geography,\ndim_event_type, dim_alert_status")]
+        DIMS[("dim_date, dim_geography (county),\ndim_geography_state (state, keys the facts),\ndim_event_type, dim_alert_status")]
         F_CAT[(fact_catastrophe_event)]
         F_ALERT[(fact_regional_alert_activity)]
         F_COMPLAINT[(fact_complaint_trend\n-- empty, see data_limitations.md)]

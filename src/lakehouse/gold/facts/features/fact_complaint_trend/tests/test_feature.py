@@ -10,4 +10,9 @@ def test_build_fact_complaint_trend_is_empty_with_correct_schema(spark: SparkSes
     df = build_fact_complaint_trend(spark)
 
     assert df.count() == 0
-    assert df.columns == ["date_key", "geography_key", "complaint_count", "complaint_rate_trend"]
+    assert df.columns == [
+        "date_key",
+        "state_geography_key",
+        "complaint_count",
+        "complaint_rate_trend",
+    ]

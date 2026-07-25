@@ -56,6 +56,7 @@ def test_run_gold_stage_builds_every_table(spark: SparkSession) -> None:
     assert set(tables) == {
         "dim_date",
         "dim_geography",
+        "dim_geography_state",
         "dim_event_type",
         "dim_alert_status",
         "fact_catastrophe_event",

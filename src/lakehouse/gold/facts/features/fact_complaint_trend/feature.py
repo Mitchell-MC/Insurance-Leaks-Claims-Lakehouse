@@ -16,7 +16,10 @@ from pyspark.sql.types import DoubleType, IntegerType, LongType, StructField, St
 SCHEMA = StructType(
     [
         StructField("date_key", IntegerType(), nullable=False),
-        StructField("geography_key", LongType(), nullable=False),
+        # Reason: state grain, matching the other region-grain facts -- see
+        # dim_geography_state's module docstring for why these don't key off
+        # the county-grain dim_geography.
+        StructField("state_geography_key", LongType(), nullable=False),
         StructField("complaint_count", IntegerType(), nullable=False),
         StructField("complaint_rate_trend", DoubleType(), nullable=False),
     ]
@@ -26,7 +29,7 @@ SCHEMA = StructType(
 def build_fact_complaint_trend(spark: SparkSession) -> DataFrame:
     """Builds the (currently empty) fact_complaint_trend table.
 
-    Grain: one row per region (`geography_key`) per date (`date_key`).
+    Grain: one row per region (`state_geography_key`) per date (`date_key`).
 
     Args:
         spark (SparkSession): Active Spark session.

@@ -22,7 +22,7 @@ not picked arbitrarily. Concretely, that shows up in:
 - `src/lakehouse/processing/features/rolling_event_intensity/feature.py` —
   a range-based `Window` (not row-based), because a trailing-30-day window
   needs to reflect actual elapsed days, not just "the last N rows."
-- `src/lakehouse/gold/` — a real dimensional model (4 dimensions, 3 facts,
+- `src/lakehouse/gold/` — a real dimensional model (5 dimensions, 3 facts,
   one derived metric), not a flat denormalized table.
 - `docs/batch_vs_streaming_memo.md` — an explicit, justified architecture
   decision, not "everything runs on the same schedule because that's simpler."
@@ -52,11 +52,27 @@ concrete tradeoff, not a hand-wave about "using Spark efficiently."
 
 ## Modeling approach
 
-The Gold star schema's grain decisions were deliberate, not default: `dim_date`,
-`dim_geography`, `dim_event_type`, `dim_alert_status` join to
-`fact_catastrophe_event` (grain: one row per FEMA declaration — matching
-exactly what KPI 3, Average Days from Event to Declaration, needs) and
-`fact_regional_alert_activity` (grain: one row per region per snapshot date).
+The Gold star schema's grain decisions were deliberate, not default.
+`fact_catastrophe_event` is one row per FEMA declaration — matching exactly
+what KPI 3, Average Days from Event to Declaration, needs — and
+`fact_regional_alert_activity` is one row per region per snapshot date.
+Both join `dim_date` and `dim_geography_state`.
+
+The geography split is the grain decision worth talking about: the Census
+Gazetteer is county-grain, but every KPI is defined at *region* (state)
+level. Joining a state-grain fact to a county-grain dimension on `state`
+alone fans one declaration out into one row per county — 254x for Texas —
+silently inflating every count-based KPI. So `dim_geography_state`
+(state-grain) keys the facts, while county-grain `dim_geography` stays
+available for future county-level facts. The regression tests for both facts
+deliberately use multi-county fixtures, since a one-county-per-state fixture
+cannot detect this class of bug.
+
+`dim_event_type` and `dim_alert_status` are built and published but not yet
+referenced by any fact — they're conformed dimensions staged for the
+event-grain fact described in `productionization_next_steps.md`, not live
+star-schema edges today.
+
 `fact_complaint_trend` exists with the correct schema but zero rows — see
 the leakage-data story below.
 

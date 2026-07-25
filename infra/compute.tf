@@ -4,10 +4,10 @@
 
 resource "databricks_cluster" "verification" {
   cluster_name            = "lakehouse-verification"
-  spark_version            = var.cluster_spark_version
-  node_type_id              = var.cluster_node_type
+  spark_version           = var.cluster_spark_version
+  node_type_id            = var.cluster_node_type
   autotermination_minutes = 30
-  num_workers              = 0 # single-node
+  num_workers             = 0 # single-node
 
   spark_conf = {
     "spark.databricks.cluster.profile" = "singleNode"
