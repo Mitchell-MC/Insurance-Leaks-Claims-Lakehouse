@@ -49,7 +49,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Mentoring brief / meta documents -- not part of the project deliverable,
+# contains third-party contact info; keep local-only, never track/push.
+*.pdf
+
 # Spark
 spark-warehouse/
 metastore_db/
 derby.log
+
+# Local tool run logs (e.g. ad-hoc dbt CLI invocations)
+logs/
