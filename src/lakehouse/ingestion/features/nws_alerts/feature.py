@@ -1,10 +1,19 @@
 """Bronze ingestor for National Weather Service active alert snapshots."""
 
 import json
+from datetime import timedelta
 
 from pyspark.sql import DataFrame
 
 from lakehouse.ingestion.base_ingestor import BaseIngestor
+from lakehouse.silver.data_quality.checks import DQCheckResult, check_freshness
+
+# Reason: this ingestor runs on a schedule (infra/jobs.tf) to approximate a
+# near-real-time feed -- if the newest `_ingestion_metadata.loaded_at` is
+# older than this, the scheduled job has likely stopped running, not that
+# the alerts themselves are stale (NWS `effective`/`expires` are separate,
+# per-alert fields this check doesn't inspect).
+_MAX_SNAPSHOT_AGE = timedelta(hours=6)
 
 
 class NwsAlertsIngestor(BaseIngestor):
@@ -37,3 +46,23 @@ class NwsAlertsIngestor(BaseIngestor):
             for feature in features
         ]
         return self._spark.read.json(self._spark.sparkContext.parallelize(json_lines))
+
+    def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
+        """Flags a snapshot whose `_ingestion_metadata.loaded_at` is stale.
+
+        Args:
+            df (DataFrame): Fetched alerts, with `_ingestion_metadata` attached.
+
+        Returns:
+            list[DQCheckResult]: Result for the freshness check ("warn"
+                severity -- a stale snapshot shouldn't block ingestion of
+                whatever data was actually fetched, only get flagged).
+        """
+        return [
+            check_freshness(
+                df,
+                "_ingestion_metadata.loaded_at",
+                _MAX_SNAPSHOT_AGE,
+                severity="warn",
+            )
+        ]

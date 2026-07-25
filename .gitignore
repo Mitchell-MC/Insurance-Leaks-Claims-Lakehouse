@@ -27,6 +27,7 @@ infra/**/.terraform/
 infra/**/.terraform.lock.hcl
 infra/**/terraform.tfstate
 infra/**/terraform.tfstate.backup
+infra/**/.terraform.tfstate.lock.info
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
 # Saved plan files embed resolved resource attributes -- never commit them.

@@ -1,6 +1,7 @@
 """Tests for NoaaStormEventsTransformer's parsing, severity banding, and dedup."""
 
 from pyspark.sql import Row, SparkSession
+from pyspark.sql import functions as F
 
 from lakehouse.config.config import LakehouseSettings
 from lakehouse.silver.features.noaa_storm_events.feature import NoaaStormEventsTransformer
@@ -97,3 +98,27 @@ def test_dq_checks_flag_null_state(spark: SparkSession) -> None:
 
     assert not results["no_null_geography"].passed
     assert results["schema_drift"].passed
+
+
+def test_dq_checks_flag_unknown_severity_band(spark: SparkSession) -> None:
+    """dq_checks() flags a SEVERITY_BAND value outside severe/moderate/minor."""
+    transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
+    df = transformer.transform(spark.createDataFrame([_row(EVENT_ID="1")])).withColumn(
+        "SEVERITY_BAND", F.lit("catastrophic")
+    )
+
+    results = {result.check_name: result for result in transformer.dq_checks(df)}
+
+    assert not results["accepted_values_SEVERITY_BAND"].passed
+
+
+def test_dq_checks_flag_negative_damage(spark: SparkSession) -> None:
+    """dq_checks() flags a negative DAMAGE_PROPERTY_USD value."""
+    transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
+    df = transformer.transform(spark.createDataFrame([_row(EVENT_ID="1")])).withColumn(
+        "DAMAGE_PROPERTY_USD", F.lit(-100.0)
+    )
+
+    results = {result.check_name: result for result in transformer.dq_checks(df)}
+
+    assert not results["damage_property_usd_non_negative"].passed

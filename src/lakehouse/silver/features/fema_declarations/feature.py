@@ -6,6 +6,7 @@ from pyspark.sql import functions as F
 from lakehouse.silver.base_transformer import BaseSilverTransformer
 from lakehouse.silver.data_quality.checks import (
     DQCheckResult,
+    check_expression,
     check_no_duplicate_keys,
     check_no_null_geography,
     check_schema_drift,
@@ -54,17 +55,22 @@ class FemaDeclarationsTransformer(BaseSilverTransformer):
         )
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
-        """Validates geography, date parsing, key uniqueness, and schema.
+        """Validates geography, date parsing, date ordering, key uniqueness, and schema.
 
         Args:
             df (DataFrame): Transformed FEMA declarations.
 
         Returns:
-            list[DQCheckResult]: Results for all four checks.
+            list[DQCheckResult]: Results for all five checks.
         """
         return [
             check_no_null_geography(df, ["state"]),
             check_valid_dates(df, ["declarationDate", "incidentBeginDate"]),
+            check_expression(
+                df,
+                F.col("declarationDate") >= F.col("incidentBeginDate"),
+                "declaration_not_before_incident",
+            ),
             check_no_duplicate_keys(df, ["disasterNumber", "designatedArea"]),
             check_schema_drift(df, _EXPECTED_COLUMNS),
         ]

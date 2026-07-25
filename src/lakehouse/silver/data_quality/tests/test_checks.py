@@ -1,14 +1,23 @@
-"""Tests for reusable Silver-layer data-quality checks."""
+"""Tests for reusable Silver- and Gold-layer data-quality checks."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from pyspark.sql import Row, SparkSession
+from pyspark.sql import functions as F
 
 from lakehouse.silver.data_quality.checks import (
+    DQCheckFailure,
+    DQCheckResult,
+    check_accepted_values,
+    check_expression,
+    check_freshness,
     check_no_duplicate_keys,
     check_no_null_geography,
+    check_referential_integrity,
     check_schema_drift,
     check_valid_dates,
+    raise_on_failures,
 )
 
 
@@ -60,3 +69,175 @@ def test_check_schema_drift_flags_unexpected_columns(spark: SparkSession) -> Non
 
     assert not result.passed
     assert result.failed_count == 1
+
+
+def test_check_result_defaults_to_error_severity() -> None:
+    """DQCheckResult defaults to "error" severity when not specified."""
+    result = DQCheckResult(check_name="x", passed=True, failed_count=0)
+
+    assert result.severity == "error"
+
+
+def test_check_accepted_values_passes_for_known_values(spark: SparkSession) -> None:
+    """check_accepted_values passes when every value is in the allowed set."""
+    df = spark.createDataFrame([Row(band="severe"), Row(band="minor")])
+
+    result = check_accepted_values(df, "band", {"severe", "moderate", "minor"})
+
+    assert result.passed
+    assert result.failed_count == 0
+
+
+def test_check_accepted_values_flags_unknown_values(spark: SparkSession) -> None:
+    """check_accepted_values counts rows whose value isn't in the allowed set."""
+    df = spark.createDataFrame([Row(band="severe"), Row(band="catastrophic")])
+
+    result = check_accepted_values(df, "band", {"severe", "moderate", "minor"})
+
+    assert not result.passed
+    assert result.failed_count == 1
+    assert result.check_name == "accepted_values_band"
+
+
+def test_check_accepted_values_ignores_nulls(spark: SparkSession) -> None:
+    """check_accepted_values does not flag nulls -- that's a separate not-null check's job."""
+    df = spark.createDataFrame([Row(band="severe"), Row(band=None)])
+
+    result = check_accepted_values(df, "band", {"severe"})
+
+    assert result.passed
+
+
+def test_check_expression_flags_false_rows(spark: SparkSession) -> None:
+    """check_expression counts rows where the expression is false."""
+    df = spark.createDataFrame([Row(amount=10.0), Row(amount=-5.0)])
+
+    result = check_expression(df, F.col("amount") >= 0, "amount_non_negative")
+
+    assert not result.passed
+    assert result.failed_count == 1
+    assert result.check_name == "amount_non_negative"
+
+
+def test_check_expression_flags_null_as_failure(spark: SparkSession) -> None:
+    """check_expression treats a null expression result as a failure (SQL "unknown" semantics)."""
+    df = spark.createDataFrame([Row(amount=10.0), Row(amount=None)])
+
+    result = check_expression(df, F.col("amount") >= 0, "amount_non_negative")
+
+    assert not result.passed
+    assert result.failed_count == 1
+
+
+def test_check_referential_integrity_passes_when_all_keys_resolve(spark: SparkSession) -> None:
+    """check_referential_integrity passes when every fact key exists in the dimension."""
+    fact_df = spark.createDataFrame([Row(state_key=1), Row(state_key=2)])
+    dim_df = spark.createDataFrame([Row(key=1), Row(key=2), Row(key=3)])
+
+    result = check_referential_integrity(fact_df, dim_df, "state_key", "key")
+
+    assert result.passed
+    assert result.failed_count == 0
+
+
+def test_check_referential_integrity_flags_orphaned_keys(spark: SparkSession) -> None:
+    """check_referential_integrity counts fact rows whose key has no matching dimension row."""
+    fact_df = spark.createDataFrame([Row(state_key=1), Row(state_key=99)])
+    dim_df = spark.createDataFrame([Row(key=1), Row(key=2)])
+
+    result = check_referential_integrity(fact_df, dim_df, "state_key", "key")
+
+    assert not result.passed
+    assert result.failed_count == 1
+    assert result.check_name == "referential_integrity_state_key"
+
+
+def test_check_referential_integrity_accepts_check_name_override(spark: SparkSession) -> None:
+    """check_referential_integrity uses the given check_name instead of the default.
+
+    Needed when the same fact_key/dim_key pair is checked against more than
+    one fact table -- the default name alone wouldn't disambiguate them.
+    """
+    fact_df = spark.createDataFrame([Row(state_key=1)])
+    dim_df = spark.createDataFrame([Row(key=1)])
+
+    result = check_referential_integrity(
+        fact_df, dim_df, "state_key", "key", check_name="my_fact_referential_integrity"
+    )
+
+    assert result.check_name == "my_fact_referential_integrity"
+
+
+def test_check_referential_integrity_flags_null_fact_key(spark: SparkSession) -> None:
+    """check_referential_integrity treats a null foreign key as unresolved, not exempt."""
+    fact_df = spark.createDataFrame([Row(state_key=1), Row(state_key=None)])
+    dim_df = spark.createDataFrame([Row(key=1)])
+
+    result = check_referential_integrity(fact_df, dim_df, "state_key", "key")
+
+    assert not result.passed
+    assert result.failed_count == 1
+
+
+def test_check_freshness_passes_for_recent_timestamp(spark: SparkSession) -> None:
+    """check_freshness passes when the newest timestamp is within max_age."""
+    recent = datetime.now(UTC) - timedelta(minutes=5)
+    df = spark.createDataFrame([Row(loaded_at=recent)])
+
+    result = check_freshness(df, "loaded_at", timedelta(hours=1))
+
+    assert result.passed
+    assert result.failed_count == 0
+
+
+def test_check_freshness_flags_stale_timestamp(spark: SparkSession) -> None:
+    """check_freshness fails when the newest timestamp is older than max_age."""
+    stale = datetime.now(UTC) - timedelta(hours=2)
+    df = spark.createDataFrame([Row(loaded_at=stale)])
+
+    result = check_freshness(df, "loaded_at", timedelta(hours=1))
+
+    assert not result.passed
+    assert result.failed_count == 1
+    assert result.check_name == "freshness_loaded_at"
+
+
+def test_check_freshness_flags_empty_dataframe_as_stale(spark: SparkSession) -> None:
+    """check_freshness fails when there are no rows to derive a max timestamp from."""
+    df = spark.createDataFrame([], schema="loaded_at timestamp")
+
+    result = check_freshness(df, "loaded_at", timedelta(hours=1))
+
+    assert not result.passed
+    assert result.failed_count == 1
+
+
+def test_check_freshness_defaults_to_warn_severity(spark: SparkSession) -> None:
+    """check_freshness defaults to "warn" severity, unlike the other checks."""
+    df = spark.createDataFrame([Row(loaded_at=datetime.now(UTC))])
+
+    result = check_freshness(df, "loaded_at", timedelta(hours=1))
+
+    assert result.severity == "warn"
+
+
+def test_raise_on_failures_raises_for_error_severity_failure() -> None:
+    """raise_on_failures raises DQCheckFailure when an error-severity check failed."""
+    results = [DQCheckResult(check_name="x", passed=False, failed_count=1, severity="error")]
+
+    with pytest.raises(DQCheckFailure, match="x"):
+        raise_on_failures(results)
+
+
+def test_raise_on_failures_ignores_warn_severity_failure() -> None:
+    """raise_on_failures does not raise when only a warn-severity check failed."""
+    results = [DQCheckResult(check_name="x", passed=False, failed_count=1, severity="warn")]
+
+    raise_on_failures(results)
+
+
+def test_raise_on_failures_does_not_raise_when_all_passed() -> None:
+    """raise_on_failures does not raise when every check passed."""
+    results = [DQCheckResult(check_name="x", passed=True, failed_count=0, severity="error")]
+
+    raise_on_failures(results)

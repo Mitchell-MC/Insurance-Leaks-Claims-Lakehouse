@@ -8,6 +8,7 @@ from pyspark.sql import DataFrame, Row, SparkSession
 
 from lakehouse.config.config import LakehouseSettings
 from lakehouse.ingestion.base_ingestor import BaseIngestor
+from lakehouse.silver.data_quality.checks import DQCheckFailure, DQCheckResult
 
 
 class _DummyIngestor(BaseIngestor):
@@ -21,6 +22,13 @@ class _DummyIngestor(BaseIngestor):
 
     def fetch(self) -> DataFrame:
         return self._spark.createDataFrame(self._rows)
+
+
+class _FailingDqIngestor(_DummyIngestor):
+    """Ingestor whose dq_checks() always reports an error-severity failure."""
+
+    def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
+        return [DQCheckResult(check_name="always_fails", passed=False, failed_count=1)]
 
 
 @pytest.fixture
@@ -40,6 +48,16 @@ def test_run_attaches_ingestion_metadata(spark: SparkSession, settings: Lakehous
     assert metadata["record_count"] == 3
     assert metadata["run_id"]
     assert metadata["loaded_at"] is not None
+
+
+def test_run_raises_on_error_severity_dq_failure(
+    spark: SparkSession, settings: LakehouseSettings
+) -> None:
+    """run() raises DQCheckFailure when dq_checks() reports an error-severity failure."""
+    ingestor = _FailingDqIngestor(settings, spark, [Row(value="a")])
+
+    with pytest.raises(DQCheckFailure, match="always_fails"):
+        ingestor.run()
 
 
 def test_make_request_retries_then_succeeds(

@@ -12,6 +12,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from lakehouse.config.config import LakehouseSettings
+from lakehouse.silver.data_quality.checks import DQCheckResult, raise_on_failures
 
 
 class IngestionMetadata(BaseModel):
@@ -63,8 +64,22 @@ class BaseIngestor(ABC):
             DataFrame: Raw records in their source shape.
         """
 
+    def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
+        """Runs the data-quality checks required after fetching Bronze data.
+
+        Default is no checks; concrete ingestors override this to add
+        source-specific checks (e.g. freshness for a near-real-time feed).
+
+        Args:
+            df (DataFrame): Fetched DataFrame, with `_ingestion_metadata` attached.
+
+        Returns:
+            list[DQCheckResult]: One result per check run. Empty by default.
+        """
+        return []
+
     def run(self, source_file_date: date | None = None) -> DataFrame:
-        """Fetches source data and attaches the `_ingestion_metadata` struct column.
+        """Fetches source data, attaches `_ingestion_metadata`, and runs DQ checks.
 
         Args:
             source_file_date (date | None): Date of the underlying source file,
@@ -72,6 +87,9 @@ class BaseIngestor(ABC):
 
         Returns:
             DataFrame: Raw records with an added `_ingestion_metadata` column.
+
+        Raises:
+            DQCheckFailure: If any "error"-severity check in `dq_checks()` failed.
         """
         raw_df = self.fetch()
         metadata = IngestionMetadata(
@@ -80,7 +98,7 @@ class BaseIngestor(ABC):
             run_id=str(uuid.uuid4()),
             record_count=raw_df.count(),
         )
-        return raw_df.withColumn(
+        result_df = raw_df.withColumn(
             "_ingestion_metadata",
             F.struct(
                 F.lit(metadata.source_file_date).cast("date").alias("source_file_date"),
@@ -89,6 +107,8 @@ class BaseIngestor(ABC):
                 F.lit(metadata.record_count).alias("record_count"),
             ),
         )
+        raise_on_failures(self.dq_checks(result_df))
+        return result_df
 
     def write_bronze(self, df: DataFrame) -> None:
         """Writes a DataFrame to the Bronze Delta table for this ingestor.

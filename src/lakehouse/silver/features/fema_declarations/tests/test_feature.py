@@ -66,3 +66,25 @@ def test_dq_checks_flag_null_state_and_duplicate_keys(spark: SparkSession) -> No
     assert not results["valid_dates"].passed
     assert not results["no_duplicate_keys"].passed
     assert results["schema_drift"].passed
+
+
+def test_dq_checks_flag_declaration_before_incident(spark: SparkSession) -> None:
+    """dq_checks() flags a declaration dated before its own incident began."""
+    transformer = FemaDeclarationsTransformer(LakehouseSettings(), spark)
+    df = spark.createDataFrame(
+        [
+            Row(
+                disasterNumber=4586,
+                state="TX",
+                incidentType="Hurricane",
+                declarationDate=date(2020, 8, 20),
+                incidentBeginDate=date(2020, 8, 23),
+                designatedArea="Harris (County)",
+            )
+        ]
+    )
+
+    results = {result.check_name: result for result in transformer.dq_checks(df)}
+
+    assert not results["declaration_not_before_incident"].passed
+    assert results["declaration_not_before_incident"].failed_count == 1

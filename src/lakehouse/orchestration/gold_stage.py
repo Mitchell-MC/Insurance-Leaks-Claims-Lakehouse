@@ -21,6 +21,12 @@ from lakehouse.gold.facts.features.fact_regional_alert_activity.feature import (
 )
 from lakehouse.gold.features.leakage_risk_metric.feature import calculate_leakage_exposure_proxy
 from lakehouse.orchestration.run_logger import log_stage_run
+from lakehouse.silver.data_quality.checks import (
+    DQCheckResult,
+    check_expression,
+    check_referential_integrity,
+    raise_on_failures,
+)
 
 
 def _build_declaration_lag(fema_silver_df: DataFrame) -> DataFrame:
@@ -56,6 +62,71 @@ def _build_complaint_trend_proxy(pressure_score_df: DataFrame) -> DataFrame:
         DataFrame: `REGION`, `complaint_rate_trend_proxy`.
     """
     return pressure_score_df.select(F.col("REGION"), F.lit(0.0).alias("complaint_rate_trend_proxy"))
+
+
+def run_gold_dq_checks(
+    dim_date: DataFrame,
+    dim_geography_state: DataFrame,
+    fact_catastrophe_event: DataFrame,
+    fact_regional_alert_activity: DataFrame,
+) -> list[DQCheckResult]:
+    """Runs Gold-layer referential-integrity and business-rule checks.
+
+    Mirrors dbt's `relationships` and `expression_is_true` generic tests --
+    the Gold facts here are built with left joins against the dimensions
+    (see fact_catastrophe_event/feature.py, fact_regional_alert_activity/
+    feature.py), so a state code or date that fails to reconcile would
+    otherwise surface only as a silent null foreign key.
+
+    Args:
+        dim_date (DataFrame): Gold `dim_date`.
+        dim_geography_state (DataFrame): Gold `dim_geography_state`.
+        fact_catastrophe_event (DataFrame): Built `fact_catastrophe_event`.
+        fact_regional_alert_activity (DataFrame): Built `fact_regional_alert_activity`.
+
+    Returns:
+        list[DQCheckResult]: One result per check run.
+    """
+    return [
+        check_referential_integrity(
+            fact_catastrophe_event,
+            dim_geography_state,
+            "state_geography_key",
+            "state_geography_key",
+            check_name="fact_catastrophe_event_referential_integrity_state_geography_key",
+        ),
+        check_referential_integrity(
+            fact_catastrophe_event,
+            dim_date,
+            "date_key",
+            "date_key",
+            check_name="fact_catastrophe_event_referential_integrity_date_key",
+        ),
+        check_referential_integrity(
+            fact_regional_alert_activity,
+            dim_geography_state,
+            "state_geography_key",
+            "state_geography_key",
+            check_name="fact_regional_alert_activity_referential_integrity_state_geography_key",
+        ),
+        check_referential_integrity(
+            fact_regional_alert_activity,
+            dim_date,
+            "date_key",
+            "date_key",
+            check_name="fact_regional_alert_activity_referential_integrity_date_key",
+        ),
+        check_expression(
+            fact_catastrophe_event,
+            F.col("days_to_declaration") >= 0,
+            "days_to_declaration_non_negative",
+        ),
+        check_expression(
+            fact_catastrophe_event,
+            F.col("total_damage_property_usd") >= 0,
+            "total_damage_property_usd_non_negative",
+        ),
+    ]
 
 
 def run_gold_stage(
@@ -109,6 +180,13 @@ def run_gold_stage(
         complaint_trend_proxy_df = _build_complaint_trend_proxy(pressure_score_df)
         leakage_risk_metric = calculate_leakage_exposure_proxy(
             pressure_score_df, complaint_trend_proxy_df, declaration_lag_df
+        )
+
+    with log_stage_run("gold.dq_checks"):
+        raise_on_failures(
+            run_gold_dq_checks(
+                dim_date, dim_geography_state, fact_catastrophe_event, fact_regional_alert_activity
+            )
         )
 
     return {

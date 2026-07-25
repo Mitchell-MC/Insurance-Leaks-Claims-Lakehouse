@@ -9,7 +9,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from lakehouse.config.config import LakehouseSettings
-from lakehouse.silver.data_quality.checks import DQCheckResult
+from lakehouse.silver.data_quality.checks import DQCheckResult, raise_on_failures
 
 
 class DQMetadata(BaseModel):
@@ -82,9 +82,17 @@ class BaseSilverTransformer(ABC):
 
         Returns:
             DataFrame: Standardized records with an added `_dq_metadata` column.
+
+        Raises:
+            DQCheckFailure: If any "error"-severity check in `dq_checks()`
+                failed. Reason: promoting Silver data that fails an
+                error-severity check (e.g. duplicate keys) would let bad
+                rows flow into Gold with only a metadata column noting it --
+                see checks.raise_on_failures.
         """
         silver_df = self.transform(bronze_df)
         results = self.dq_checks(silver_df)
+        raise_on_failures(results)
         metadata = DQMetadata(
             checked_at=datetime.now(UTC),
             run_id=str(uuid.uuid4()),
