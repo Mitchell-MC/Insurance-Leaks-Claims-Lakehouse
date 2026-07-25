@@ -53,10 +53,18 @@ variable "enable_sql_warehouse" {
   default     = false
 }
 
+# Reason: the original Standard_DS3_v2 default fails on two counts in eastus2 --
+# that SKU is no longer offered there at all (the DS/Dv3 families have aged out
+# in favour of v6/v7), and at 4 vCPUs it exactly consumes a Free Trial's
+# "Total Regional vCPUs" limit of 4, leaving no headroom for the driver. The
+# resulting Databricks error ("The VM size you are specifying is not available")
+# reads like a stockout but is really an availability+quota wall. D2ds_v7 is
+# 2 vCPU / 8 GB with local SSD and premium storage, which fits inside the cap.
+# On a subscription with a raised quota, a 4-vCPU node is the better default.
 variable "cluster_node_type" {
-  description = "VM size for the Phase 0 verification cluster."
+  description = "VM size for the Phase 0 verification cluster. Must be offered in var.location and fit the subscription's regional vCPU quota (Free Trial caps this at 4)."
   type        = string
-  default     = "Standard_DS3_v2"
+  default     = "Standard_D2ds_v7"
 }
 
 variable "cluster_single_user_name" {
