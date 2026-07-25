@@ -17,7 +17,8 @@ locals {
 # batch runs would just re-read unchanged source files.
 # ------------------------------------------------------------------------
 resource "databricks_job" "lakehouse_batch" {
-  name = "lakehouse-batch-pipeline"
+  count = var.enable_scheduled_jobs ? 1 : 0
+  name  = "lakehouse-batch-pipeline"
 
   schedule {
     quartz_cron_expression = "0 0 6 * * ?" # 06:00 UTC daily
@@ -108,7 +109,8 @@ resource "databricks_job" "lakehouse_batch" {
 # reprocess unchanged FEMA/NOAA data for no benefit.
 # ------------------------------------------------------------------------
 resource "databricks_job" "lakehouse_alerts" {
-  name = "lakehouse-alerts-snapshot"
+  count = var.enable_scheduled_jobs ? 1 : 0
+  name  = "lakehouse-alerts-snapshot"
 
   schedule {
     quartz_cron_expression = "0 */15 * * * ?" # every 15 minutes

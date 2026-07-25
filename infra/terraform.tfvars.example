@@ -5,6 +5,13 @@ storage_account_name   = "stinsurancelakehouse01" # must be globally unique
 storage_container_name = "lakehouse"
 catalog_name            = "insurance_lakehouse"
 
+# Cost flags -- see infra/README.md's "Cost scoping" section.
+# enable_scheduled_jobs = true keeps the verification cluster awake ~24/7,
+# because the alerts job's 15-minute schedule preempts its 30-minute
+# autotermination. Leave both false unless you want that ongoing bill.
+enable_scheduled_jobs = false
+enable_sql_warehouse  = false
+
 lakehouse_wheel_path             = "dbfs:/FileStore/wheels/lakehouse-0.1.0-py3-none-any.whl"
 job_failure_notification_emails  = ["claims-data-eng@example.com"]
 job_failure_webhook_id           = ""

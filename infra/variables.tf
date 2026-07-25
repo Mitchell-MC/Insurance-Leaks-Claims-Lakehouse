@@ -33,6 +33,26 @@ variable "catalog_name" {
   default     = "insurance_lakehouse"
 }
 
+# Reason: the scheduled jobs and the Power BI SQL warehouse are the only
+# continuously-billing resources here, and they are not needed to demonstrate
+# that ingestion writes real Delta tables into Unity Catalog. Note especially
+# that `lakehouse-alerts-snapshot` runs every 15 minutes against a cluster with
+# `autotermination_minutes = 30`, so enabling it keeps that cluster awake ~24/7
+# rather than letting it idle down. Both default to disabled so a plain
+# `terraform apply` provisions the workspace/catalog/cluster only; set these to
+# true deliberately, and expect an ongoing bill.
+variable "enable_scheduled_jobs" {
+  description = "Create the two scheduled Databricks Jobs (jobs.tf). Keeps the verification cluster awake ~24/7 when true, because the alerts job's 15-minute schedule preempts the cluster's 30-minute autotermination."
+  type        = bool
+  default     = false
+}
+
+variable "enable_sql_warehouse" {
+  description = "Create the Power BI SQL warehouse (sql_warehouse.tf). Only needed when actually building the .pbix against Gold."
+  type        = bool
+  default     = false
+}
+
 variable "cluster_node_type" {
   description = "VM size for the Phase 0 verification cluster."
   type        = string

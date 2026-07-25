@@ -34,6 +34,29 @@ Databricks Jobs (`jobs.tf`) that run the pipeline — see
    databricks fs cp dist/lakehouse-0.1.0-py3-none-any.whl dbfs:/FileStore/wheels/ --overwrite
    ```
 
+## Cost scoping (read before `apply`)
+
+By default this config provisions **only** the workspace, storage, Unity
+Catalog schemas, and the single-node verification cluster. The two
+continuously-billing pieces are behind flags, both defaulting to `false`:
+
+| Variable | Creates | Why it's off by default |
+|---|---|---|
+| `enable_scheduled_jobs` | `jobs.tf`'s two Databricks Jobs | `lakehouse-alerts-snapshot` runs **every 15 minutes** against a cluster with `autotermination_minutes = 30`, so the cluster never idles down — effectively 24/7 compute. |
+| `enable_sql_warehouse` | `sql_warehouse.tf`'s Power BI warehouse | Only needed when actually building the `.pbix` against Gold. Serverless with a 10-minute auto-stop, so cost is bursty rather than constant. |
+
+Enable them deliberately in `terraform.tfvars` when you want that behavior:
+
+```hcl
+enable_scheduled_jobs = true
+enable_sql_warehouse  = true
+```
+
+The verification cluster auto-terminates after 30 idle minutes, so with both
+flags off an idle deployment costs storage plus the workspace itself.
+
+Run `terraform destroy` when you're done demoing.
+
 ## Usage
 
 ```bash

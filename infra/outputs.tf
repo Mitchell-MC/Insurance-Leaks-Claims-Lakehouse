@@ -13,12 +13,14 @@ output "verification_cluster_id" {
   value       = databricks_cluster.verification.cluster_id
 }
 
+# Reason: these resolve to null when `enable_sql_warehouse = false` (the
+# default), since the warehouse resource is then not created.
 output "power_bi_sql_warehouse_http_path" {
-  description = "HTTP path for Power BI's Databricks connector (Server Hostname + this = the Get Data connection)."
-  value       = databricks_sql_endpoint.power_bi.odbc_params[0].path
+  description = "HTTP path for Power BI's Databricks connector (Server Hostname + this = the Get Data connection). Null unless enable_sql_warehouse is true."
+  value       = one(databricks_sql_endpoint.power_bi[*].odbc_params[0].path)
 }
 
 output "power_bi_sql_warehouse_hostname" {
-  description = "Server hostname for Power BI's Databricks connector."
-  value       = databricks_sql_endpoint.power_bi.odbc_params[0].hostname
+  description = "Server hostname for Power BI's Databricks connector. Null unless enable_sql_warehouse is true."
+  value       = one(databricks_sql_endpoint.power_bi[*].odbc_params[0].hostname)
 }
