@@ -27,7 +27,7 @@ resource "databricks_job" "lakehouse_batch" {
 
   task {
     task_key            = "ingest_historical"
-    existing_cluster_id = databricks_cluster.verification.cluster_id
+    existing_cluster_id = one(databricks_cluster.verification[*].cluster_id)
     library {
       whl = var.lakehouse_wheel_path
     }
@@ -43,7 +43,7 @@ resource "databricks_job" "lakehouse_batch" {
     depends_on {
       task_key = "ingest_historical"
     }
-    existing_cluster_id = databricks_cluster.verification.cluster_id
+    existing_cluster_id = one(databricks_cluster.verification[*].cluster_id)
     library {
       whl = var.lakehouse_wheel_path
     }
@@ -59,7 +59,7 @@ resource "databricks_job" "lakehouse_batch" {
     depends_on {
       task_key = "silver"
     }
-    existing_cluster_id = databricks_cluster.verification.cluster_id
+    existing_cluster_id = one(databricks_cluster.verification[*].cluster_id)
     library {
       whl = var.lakehouse_wheel_path
     }
@@ -75,7 +75,7 @@ resource "databricks_job" "lakehouse_batch" {
     depends_on {
       task_key = "process"
     }
-    existing_cluster_id = databricks_cluster.verification.cluster_id
+    existing_cluster_id = one(databricks_cluster.verification[*].cluster_id)
     library {
       whl = var.lakehouse_wheel_path
     }
@@ -119,7 +119,7 @@ resource "databricks_job" "lakehouse_alerts" {
 
   task {
     task_key            = "ingest_alerts"
-    existing_cluster_id = databricks_cluster.verification.cluster_id
+    existing_cluster_id = one(databricks_cluster.verification[*].cluster_id)
     library {
       whl = var.lakehouse_wheel_path
     }

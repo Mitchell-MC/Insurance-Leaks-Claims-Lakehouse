@@ -9,8 +9,8 @@ output "catalog_name" {
 }
 
 output "verification_cluster_id" {
-  description = "Cluster ID for the Phase 0 manual verification run."
-  value       = databricks_cluster.verification.cluster_id
+  description = "Cluster ID for the Phase 0 manual verification run. Null when enable_verification_cluster is false (e.g. on subscriptions that cannot allocate a supported node type)."
+  value       = one(databricks_cluster.verification[*].cluster_id)
 }
 
 # Reason: these resolve to null when `enable_sql_warehouse = false` (the

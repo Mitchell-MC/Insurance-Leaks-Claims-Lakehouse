@@ -3,6 +3,7 @@
 # for Power BI is added in Phase 7 once the gold mart exists to query.
 
 resource "databricks_cluster" "verification" {
+  count                   = var.enable_verification_cluster ? 1 : 0
   cluster_name            = "lakehouse-verification"
   spark_version           = var.cluster_spark_version
   node_type_id            = var.cluster_node_type

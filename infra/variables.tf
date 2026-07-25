@@ -67,6 +67,18 @@ variable "cluster_node_type" {
   default     = "Standard_D2ds_v7"
 }
 
+# Reason: every Databricks-supported node type is either retired from eastus2 or
+# returns NotAvailableForSubscription on a Free Trial (a subscription-tier
+# capacity restriction, not a quota -- raising the vCPU limit does not lift it).
+# Serverless SQL runs on Databricks-managed capacity instead, so the warehouse
+# works where a VM-backed cluster cannot. Set this false to skip the cluster and
+# drive Unity Catalog entirely through the serverless warehouse.
+variable "enable_verification_cluster" {
+  description = "Create the VM-backed verification cluster. Requires a node type your subscription can actually allocate; Free Trial subscriptions generally cannot."
+  type        = bool
+  default     = true
+}
+
 variable "cluster_single_user_name" {
   description = "Databricks user principal that owns the SINGLE_USER verification cluster (usually your Entra ID UPN, e.g. you@yourtenant.onmicrosoft.com). Required because Unity Catalog workspaces reject the legacy NO_ISOLATION single-node mode."
   type        = string
