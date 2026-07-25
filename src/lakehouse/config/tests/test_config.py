@@ -26,3 +26,36 @@ def test_bronze_table_path_joins_storage_root_and_schema() -> None:
     assert settings.bronze_table_path("fema_declarations") == (
         "dbfs:/lakehouse/bronze/fema_declarations"
     )
+
+
+def test_silver_table_path_joins_storage_root_and_schema() -> None:
+    """silver_table_path() builds a path under storage_root/silver_schema/table_name."""
+    settings = LakehouseSettings(storage_root="dbfs:/lakehouse")
+    assert settings.silver_table_path("fema_declarations") == (
+        "dbfs:/lakehouse/silver/fema_declarations"
+    )
+
+
+def test_gold_table_path_joins_storage_root_and_schema() -> None:
+    """gold_table_path() builds a path under storage_root/gold_schema/table_name."""
+    settings = LakehouseSettings(storage_root="dbfs:/lakehouse")
+    assert settings.gold_table_path("fact_catastrophe_event") == (
+        "dbfs:/lakehouse/gold/fact_catastrophe_event"
+    )
+
+
+def test_source_defaults_are_populated() -> None:
+    """New ingestion-source settings load with sensible defaults."""
+    settings = LakehouseSettings()
+    assert settings.fema_page_size == 1000
+    assert settings.noaa_start_year == 1996
+    assert settings.noaa_end_year is None
+    assert settings.census_gazetteer_year == 2024
+    assert "weather.gov" not in settings.nws_user_agent
+
+
+def test_noaa_end_year_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LAKEHOUSE_NOAA_END_YEAR overrides the default open-ended end year."""
+    monkeypatch.setenv("LAKEHOUSE_NOAA_END_YEAR", "2020")
+    settings = LakehouseSettings()
+    assert settings.noaa_end_year == 2020
