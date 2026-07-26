@@ -96,8 +96,8 @@ def test_dq_checks_flag_null_state(spark: SparkSession) -> None:
 
     results = {result.check_name: result for result in transformer.dq_checks(df)}
 
-    assert not results["no_null_geography"].passed
-    assert results["schema_drift"].passed
+    assert not results["schema_not_null_STATE"].passed
+    assert results["schema_columns"].passed
 
 
 def test_dq_checks_flag_unknown_severity_band(spark: SparkSession) -> None:
@@ -121,4 +121,4 @@ def test_dq_checks_flag_negative_damage(spark: SparkSession) -> None:
 
     results = {result.check_name: result for result in transformer.dq_checks(df)}
 
-    assert not results["damage_property_usd_non_negative"].passed
+    assert not results["schema_range_DAMAGE_PROPERTY_USD"].passed

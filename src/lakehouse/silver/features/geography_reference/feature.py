@@ -4,14 +4,9 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from lakehouse.silver.base_transformer import BaseSilverTransformer
-from lakehouse.silver.data_quality.checks import (
-    DQCheckResult,
-    check_no_duplicate_keys,
-    check_no_null_geography,
-    check_schema_drift,
-)
-
-_EXPECTED_COLUMNS = {"USPS", "GEOID", "NAME", "ALAND", "AWATER"}
+from lakehouse.silver.data_quality.checks import DQCheckResult
+from lakehouse.silver.data_quality.schema import check_against_schema
+from lakehouse.silver.features.geography_reference.schema import SCHEMA
 
 
 class GeographyReferenceTransformer(BaseSilverTransformer):
@@ -41,16 +36,12 @@ class GeographyReferenceTransformer(BaseSilverTransformer):
         )
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
-        """Validates geography completeness, county-key uniqueness, and schema.
+        """Validates the declared schema (columns, types, not-null, uniqueness).
 
         Args:
             df (DataFrame): Transformed Gazetteer county rows.
 
         Returns:
-            list[DQCheckResult]: Results for all three checks.
+            list[DQCheckResult]: Schema-derived checks.
         """
-        return [
-            check_no_null_geography(df, ["USPS", "GEOID"]),
-            check_no_duplicate_keys(df, ["GEOID"]),
-            check_schema_drift(df, _EXPECTED_COLUMNS),
-        ]
+        return check_against_schema(df, SCHEMA)

@@ -53,8 +53,8 @@ def test_dq_checks_flag_null_state_and_duplicate_keys(spark: SparkSession) -> No
                 disasterNumber=4586,
                 state=None,
                 incidentType="Hurricane",
-                declarationDate=None,
-                incidentBeginDate=None,
+                declarationDate=date(2020, 8, 27),
+                incidentBeginDate=date(2020, 8, 23),
                 designatedArea="Harris (County)",
             ),
         ]
@@ -62,10 +62,9 @@ def test_dq_checks_flag_null_state_and_duplicate_keys(spark: SparkSession) -> No
 
     results = {result.check_name: result for result in transformer.dq_checks(df)}
 
-    assert not results["no_null_geography"].passed
-    assert not results["valid_dates"].passed
-    assert not results["no_duplicate_keys"].passed
-    assert results["schema_drift"].passed
+    assert not results["schema_not_null_state"].passed
+    assert not results["schema_unique_key"].passed
+    assert results["schema_columns"].passed
 
 
 def test_dq_checks_flag_declaration_before_incident(spark: SparkSession) -> None:

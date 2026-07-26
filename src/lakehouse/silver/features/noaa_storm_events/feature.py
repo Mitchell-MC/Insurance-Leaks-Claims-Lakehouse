@@ -4,32 +4,15 @@ from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as F
 
 from lakehouse.silver.base_transformer import BaseSilverTransformer
-from lakehouse.silver.data_quality.checks import (
-    DQCheckResult,
-    check_accepted_values,
-    check_expression,
-    check_no_null_geography,
-    check_schema_drift,
-    check_valid_dates,
-)
+from lakehouse.silver.data_quality.checks import DQCheckResult, check_accepted_values
+from lakehouse.silver.data_quality.schema import check_against_schema
+from lakehouse.silver.features.noaa_storm_events.schema import SCHEMA
 from lakehouse.silver.us_state_codes import STATE_NAME_TO_USPS
 
 # Reason: the only values `_severity_band` ever derives -- see that function.
 # A value outside this set means the banding logic changed without this
 # check being updated, or a bug produced something else entirely.
 _SEVERITY_BANDS = {"severe", "moderate", "minor"}
-
-_EXPECTED_COLUMNS = {
-    "EVENT_ID",
-    "STATE",
-    "CZ_NAME",
-    "EVENT_TYPE",
-    "EVENT_DATE",
-    "DAMAGE_PROPERTY_USD",
-    "MAGNITUDE",
-    "DATA_YEAR",
-    "SEVERITY_BAND",
-}
 
 # Reason: these event types carry outsized claims-leakage risk regardless of
 # NOAA's self-reported dollar damage estimate (which is frequently a rough or
@@ -153,20 +136,16 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
         )
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
-        """Validates geography, event-date parsing, severity band, and schema drift.
+        """Validates the declared schema plus the severity-band accepted-values rule.
 
         Args:
             df (DataFrame): Transformed NOAA storm events.
 
         Returns:
-            list[DQCheckResult]: Results for all four checks.
+            list[DQCheckResult]: Schema-derived checks (columns, types,
+                not-null, damage-amount range) plus the severity-band check.
         """
         return [
-            check_no_null_geography(df, ["STATE"]),
-            check_valid_dates(df, ["EVENT_DATE"]),
+            *check_against_schema(df, SCHEMA),
             check_accepted_values(df, "SEVERITY_BAND", _SEVERITY_BANDS),
-            check_expression(
-                df, F.col("DAMAGE_PROPERTY_USD") >= 0, "damage_property_usd_non_negative"
-            ),
-            check_schema_drift(df, _EXPECTED_COLUMNS),
         ]

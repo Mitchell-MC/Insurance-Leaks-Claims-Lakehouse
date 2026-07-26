@@ -4,23 +4,9 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from lakehouse.silver.base_transformer import BaseSilverTransformer
-from lakehouse.silver.data_quality.checks import (
-    DQCheckResult,
-    check_expression,
-    check_no_duplicate_keys,
-    check_no_null_geography,
-    check_schema_drift,
-    check_valid_dates,
-)
-
-_EXPECTED_COLUMNS = {
-    "disasterNumber",
-    "state",
-    "incidentType",
-    "declarationDate",
-    "incidentBeginDate",
-    "designatedArea",
-}
+from lakehouse.silver.data_quality.checks import DQCheckResult, check_expression
+from lakehouse.silver.data_quality.schema import check_against_schema
+from lakehouse.silver.features.fema_declarations.schema import SCHEMA
 
 
 class FemaDeclarationsTransformer(BaseSilverTransformer):
@@ -55,22 +41,20 @@ class FemaDeclarationsTransformer(BaseSilverTransformer):
         )
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
-        """Validates geography, date parsing, date ordering, key uniqueness, and schema.
+        """Validates the declared schema plus the declaration/incident date ordering rule.
 
         Args:
             df (DataFrame): Transformed FEMA declarations.
 
         Returns:
-            list[DQCheckResult]: Results for all five checks.
+            list[DQCheckResult]: Schema-derived checks (columns, types,
+                not-null, uniqueness) plus the date-ordering business rule.
         """
         return [
-            check_no_null_geography(df, ["state"]),
-            check_valid_dates(df, ["declarationDate", "incidentBeginDate"]),
+            *check_against_schema(df, SCHEMA),
             check_expression(
                 df,
                 F.col("declarationDate") >= F.col("incidentBeginDate"),
                 "declaration_not_before_incident",
             ),
-            check_no_duplicate_keys(df, ["disasterNumber", "designatedArea"]),
-            check_schema_drift(df, _EXPECTED_COLUMNS),
         ]

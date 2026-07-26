@@ -45,5 +45,5 @@ def test_dq_checks_flag_duplicate_geoid(spark: SparkSession) -> None:
 
     results = {result.check_name: result for result in transformer.dq_checks(df)}
 
-    assert not results["no_duplicate_keys"].passed
-    assert results["schema_drift"].passed
+    assert not results["schema_unique_key"].passed
+    assert results["schema_columns"].passed
