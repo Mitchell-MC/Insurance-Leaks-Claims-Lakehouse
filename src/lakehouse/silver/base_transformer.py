@@ -4,12 +4,17 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 
+from delta.tables import DeltaTable
 from pydantic import BaseModel
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from lakehouse.config.config import LakehouseSettings
-from lakehouse.silver.data_quality.checks import DQCheckResult, raise_on_failures
+from lakehouse.silver.data_quality.checks import (
+    DQCheckResult,
+    check_no_silent_drift,
+    raise_on_failures,
+)
 
 
 class DQMetadata(BaseModel):
@@ -74,8 +79,20 @@ class BaseSilverTransformer(ABC):
             list[DQCheckResult]: One result per check run.
         """
 
+    @property
+    def drift_numeric_columns(self) -> list[str]:
+        """list[str]: Numeric columns to include in the silent-drift check.
+
+        Empty by default (row-count drift is still checked for every
+        transformer). Override to add columns whose aggregate total should
+        also stay stable run-over-run (e.g. a damage-total column), so a bug
+        that silently shifts a sum (unit conversion, a join fan-out) gets
+        caught even though every per-row check still passes.
+        """
+        return []
+
     def run(self, bronze_df: DataFrame) -> DataFrame:
-        """Transforms, runs DQ checks, and attaches a `_dq_metadata` struct column.
+        """Transforms, runs DQ checks (incl. drift vs. the current table), and attaches metadata.
 
         Args:
             bronze_df (DataFrame): Raw records from the Bronze layer.
@@ -85,13 +102,14 @@ class BaseSilverTransformer(ABC):
 
         Raises:
             DQCheckFailure: If any "error"-severity check in `dq_checks()`
-                failed. Reason: promoting Silver data that fails an
-                error-severity check (e.g. duplicate keys) would let bad
-                rows flow into Gold with only a metadata column noting it --
-                see checks.raise_on_failures.
+                or the silent-drift check failed. Reason: promoting Silver
+                data that fails an error-severity check (e.g. duplicate
+                keys) would let bad rows flow into Gold with only a metadata
+                column noting it -- see checks.raise_on_failures.
         """
         silver_df = self.transform(bronze_df)
         results = self.dq_checks(silver_df)
+        results.extend(self._drift_checks(silver_df))
         raise_on_failures(results)
         metadata = DQMetadata(
             checked_at=datetime.now(UTC),
@@ -108,6 +126,29 @@ class BaseSilverTransformer(ABC):
                 F.lit(metadata.checks_failed).alias("checks_failed"),
             ),
         )
+
+    def _drift_checks(self, silver_df: DataFrame) -> list[DQCheckResult]:
+        """Compares `silver_df` against the table's current (pre-overwrite) contents.
+
+        This is the "run against real data and compare to the last known-good
+        version" pillar from Stint's pipeline-testing write-up, adapted to
+        this repo's overwrite-per-run Silver tables: the table on disk right
+        now *is* the last known-good output, so it doubles as the comparison
+        baseline with no separate pre-prod environment required.
+
+        Args:
+            silver_df (DataFrame): Freshly transformed DataFrame about to be
+                written by `write_silver()`.
+
+        Returns:
+            list[DQCheckResult]: Drift-check results, or an empty list on the
+                table's first run (nothing to compare against yet).
+        """
+        path = self._settings.silver_table_path(self.silver_table_name)
+        if not DeltaTable.isDeltaTable(self._spark, path):
+            return []
+        previous_df = self._spark.read.format("delta").load(path)
+        return check_no_silent_drift(silver_df, previous_df, self.drift_numeric_columns)
 
     def write_silver(self, df: DataFrame) -> None:
         """Writes a DataFrame to the Silver Delta table for this transformer.

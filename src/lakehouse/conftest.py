@@ -5,6 +5,7 @@ import sys
 from collections.abc import Iterator
 
 import pytest
+from delta import configure_spark_with_delta_pip
 from pyspark.sql import SparkSession
 
 # Reason: some dev machines have SPARK_HOME/PYSPARK_PYTHON pointed at an
@@ -19,17 +20,27 @@ os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 @pytest.fixture(scope="session")
 def spark() -> Iterator[SparkSession]:
-    """Provides a local single-node SparkSession shared across the test session.
+    """Provides a local single-node, Delta-enabled SparkSession shared across the test session.
+
+    Reason: BaseSilverTransformer.run() reads/writes real Delta tables (to
+    check for silent drift against the table's current contents), so the
+    test session needs the same Delta catalog/extensions configuration
+    production code relies on -- not just plain pyspark.
 
     Yields:
         SparkSession: Local Spark session configured for fast unit-test startup.
     """
-    session = (
+    builder = (
         SparkSession.builder.master("local[1]")
         .appName("lakehouse-tests")
         .config("spark.sql.shuffle.partitions", "1")
         .config("spark.ui.enabled", "false")
-        .getOrCreate()
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
     )
+    session = configure_spark_with_delta_pip(builder).getOrCreate()
     yield session
     session.stop()

@@ -91,6 +91,7 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
     """
 
     silver_table_name = "noaa_storm_events"
+    drift_numeric_columns = ["DAMAGE_PROPERTY_USD"]
 
     def transform(self, bronze_df: DataFrame) -> DataFrame:
         """Normalizes fields, parses damage/severity, and dedupes events.

@@ -27,6 +27,18 @@ def test_bronze_table_name() -> None:
     assert NoaaStormEventsTransformer.silver_table_name == "noaa_storm_events"
 
 
+def test_drift_numeric_columns_includes_damage_property(spark: SparkSession) -> None:
+    """DAMAGE_PROPERTY_USD is checked for silent aggregate drift run-over-run.
+
+    Reason: a unit-conversion or parsing regression in _parse_damage_property
+    would pass every per-row schema/range check while still silently shifting
+    the table's total damage estimate -- see check_no_silent_drift.
+    """
+    transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
+
+    assert transformer.drift_numeric_columns == ["DAMAGE_PROPERTY_USD"]
+
+
 def test_transform_maps_full_state_name_to_usps_and_parses_date(spark: SparkSession) -> None:
     """transform() maps NOAA's full state name to a USPS code and parses the date."""
     transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
