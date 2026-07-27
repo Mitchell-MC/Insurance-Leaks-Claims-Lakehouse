@@ -316,8 +316,15 @@ def check_no_silent_drift(
         )
     ]
     for column in numeric_columns:
-        new_sum = new_df.agg(F.sum(F.col(column)).alias("_sum")).first()["_sum"] or 0.0
-        previous_sum = previous_df.agg(F.sum(F.col(column)).alias("_sum")).first()["_sum"] or 0.0
+        new_sum_row = new_df.agg(F.sum(F.col(column)).alias("_sum")).first()
+        previous_sum_row = previous_df.agg(F.sum(F.col(column)).alias("_sum")).first()
+        # Reason: agg() over any DataFrame (including an empty one) always
+        # returns exactly one row; None is not a real outcome here, just
+        # DataFrame.first()'s general (possibly-empty-DataFrame) return type.
+        assert new_sum_row is not None
+        assert previous_sum_row is not None
+        new_sum = new_sum_row["_sum"] or 0.0
+        previous_sum = previous_sum_row["_sum"] or 0.0
         results.append(
             _check_relative_change(
                 metric_name=f"sum_{column}",
