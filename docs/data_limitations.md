@@ -87,9 +87,17 @@ pagination retry would pass through to Silver and Gold, inflating
 `historical_declaration_frequency` and KPI-3's declaration counts, with only
 a `_dq_metadata` counter recording that it happened.
 
-Both sources are expected to be naturally unique on those keys, which is why
-this hasn't bitten in practice — but "expected unique" plus "check that
-doesn't gate" is not the same as enforced.
+Geography is expected to be naturally unique on `GEOID`. **FEMA is not** —
+this was assumed, not verified, until the Docker Compose local-validation
+work (see `architecture_ideal_vs_actual.md`'s section 8) actually ran
+`schema_unique_key` against the full live OpenFEMA dataset and found 24 real
+`(disasterNumber, designatedArea)` duplicate groups (31 failing rows), which
+now blocks `silver.fema_declarations` outright since this check is
+error-severity by default. This is exactly the failure mode this section
+already warned about — it just hadn't been exercised against full real data
+before. Closing it needs an explicit "keep the newest" or "keep the
+DQ-flagged records" dedup rule added to `FemaDeclarationsTransformer`,
+mirroring NOAA's `dropDuplicates` pattern.
 
 ## Watermark state and tombstone detection
 
@@ -136,6 +144,32 @@ column subset the KPIs actually need (`STATE`, `CZ_NAME`, `EVENT_TYPE`,
 `BEGIN_DATE_TIME`, `DAMAGE_PROPERTY`, `MAGNITUDE`, `EVENT_ID`), all of which
 are present across the full 1996-present range, so drift in less-used
 columns doesn't propagate past Bronze.
+
+## NOAA `STATE` is declared non-nullable, but real data always has nulls there
+
+**Status: open — discovered via the Docker Compose local-validation work,
+not yet fixed.**
+
+`silver/features/noaa_storm_events/schema.py` declares `STATE` `nullable=False`.
+`_map_state_to_usps` (`silver/features/noaa_storm_events/feature.py`) maps a
+raw state/territory name to its USPS code via a fixed lookup table
+(`us_state_codes.py`), returning `null` for anything not in that table.
+
+NOAA's real `STATE` column is not limited to the 50 states plus territories
+— it also includes marine zones (`"GULF OF MEXICO"`, `"LAKE MICHIGAN"`,
+`"ATLANTIC SOUTH"`, and similar) for offshore storm events, none of which are
+in `STATE_NAME_TO_USPS`. Every full year of real NOAA data checked so far
+(2023, 2024) contains rows with one of these marine-zone values, meaning
+`schema_not_null_STATE` — an error-severity check — fails for any full,
+real year, not as a rare edge case but structurally, every time. This
+appears to have gone unnoticed because prior verification relied on small,
+hand-built test fixtures that never included a marine-zone row.
+
+Closing this needs an explicit decision: either drop marine-zone events
+during Silver standardization (they're not attributable to a U.S. state's
+claims-leakage risk, this project's actual analytical unit), or relax
+`STATE` to nullable and let downstream aggregations filter/`COALESCE`
+around the null rather than gate the whole run on it.
 
 ## `DAMAGE_PROPERTY` is a rough estimate, not an audited figure
 

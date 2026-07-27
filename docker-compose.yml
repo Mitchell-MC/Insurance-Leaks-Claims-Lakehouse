@@ -1,0 +1,28 @@
+# Local simulation of the pipeline infra/*.tf provisions for real -- see
+# docs/architecture_ideal_vs_actual.md's "Local validation (Docker Compose)"
+# section for exactly what is and isn't simulated. Storage here is a plain
+# local Docker volume, not an Azure emulator: Azurite was evaluated and
+# rejected after direct testing -- its Blob (wasbs://) driver hung on an
+# unresolved hadoop-azure-SDK/Azurite response incompatibility, and its ABFS
+# (abfs://) driver is confirmed (from Azurite's own source, not just its
+# error messages) to have no hierarchical-namespace/Gen2 support at all in
+# this version. A local volume makes an honest, narrower claim instead:
+# "storage root is swappable via LAKEHOUSE_STORAGE_ROOT," not "this behaves
+# like ADLS Gen2."
+
+services:
+  lakehouse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      LAKEHOUSE_STORAGE_ROOT: file:///data/lakehouse
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./src:/app/src
+      - lakehouse-data:/data/lakehouse
+
+volumes:
+  lakehouse-data:

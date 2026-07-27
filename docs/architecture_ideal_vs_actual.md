@@ -223,6 +223,72 @@ these views, which this repo cannot author.
 
 ---
 
+## 8. Local validation (Docker Compose)
+
+**Ideal.** Pipeline logic should be validatable end-to-end — real Delta reads
+and writes across every stage, not just mocked-Spark unit tests — without
+requiring a provisioned Azure subscription. Useful both for a contributor
+without Azure access and as a fast CI check that catches drift in the
+Databricks-vs-local assumptions `main.py` makes.
+
+**Aside — what's implemented, and what was tried first.** A Docker Compose
+stack (`Dockerfile`, `docker-compose.yml`) runs the exact same `lakehouse`
+console script against a local `SparkSession`, with Delta's catalog/extension
+config supplied via a mounted `docker/spark-defaults.conf` rather than
+Databricks' ambient cluster config — `main.py` itself needed zero code
+changes; Spark reads that file via `SPARK_CONF_DIR` regardless of how the
+Python builder is constructed.
+
+Storage is a **plain Docker volume** (`file://`), not an Azure emulator. That
+wasn't the first thing tried. Azurite (Microsoft's official Azure Storage
+emulator) was set up and tested directly, on the reasoning that a real
+emulator in the stack would be a more honest "simulated Azure" than a bare
+filesystem path:
+
+- **Blob protocol (`wasbs://`, `hadoop-azure`'s WASB driver):** connects,
+  authenticates, and creates containers successfully, but hangs indefinitely
+  on Delta's own container-metadata check (`DeltaTable.isDeltaTable` →
+  `checkContainer` → `downloadAttributes`) — a thread dump showed the Azure
+  Storage SDK (7.0.1, bundled with this `hadoop-azure` version) stuck in its
+  own internal retry-backoff loop *before* ever issuing the HTTP request
+  (confirmed by Azurite's own access log showing zero incoming requests
+  during the hang). This reproduced consistently across fixes to DNS
+  aliasing, HTTP-vs-HTTPS mode, and JVM entropy configuration, and reads as a
+  genuine compatibility gap between this old SDK and this Azurite version,
+  not a configuration mistake.
+- **ABFS protocol (`abfs://`, the modern Data Lake Gen2 driver):** fails
+  fast and cleanly instead of hanging — with `"This endpoint does not
+  support BlobStorageEvents or SoftDelete"` (HTTP 409). Checking Azurite
+  3.36.0's own source directly (not just its error message) confirmed there
+  is no hierarchical-namespace/Gen2 toggle anywhere in it: ABFS is
+  architecturally unsupported in this Azurite version, not a config gap.
+
+Since production's real storage account is ADLS Gen2 (`is_hns_enabled =
+true`, `abfss://` addressing — see `infra/main.tf`), and Azurite can't
+faithfully emulate that regardless of which driver is used, a plain local
+volume was the more honest choice: it claims only "storage root is
+swappable via `LAKEHOUSE_STORAGE_ROOT`," not "this behaves like ADLS Gen2."
+
+This does **not** validate: Unity Catalog access control, ADLS Gen2
+hierarchical-namespace semantics, the wheel-build-and-upload deploy path
+(`infra/README.md`), real cluster autoscaling/cost behavior, or the two
+scheduled jobs' cron-triggered execution.
+
+**A real, separate finding surfaced along the way.** Running the full
+pipeline against live data in this local stack (not a Docker problem —
+identical behavior confirmed outside Docker too) exercises the existing DQ
+gates for real, and both trip: FEMA has genuine duplicate
+`(disasterNumber, designatedArea)` keys in the live OpenFEMA data (24 groups
+found), and NOAA's `STATE` column always includes non-US marine zones (e.g.
+`"GULF OF MEXICO"`, `"LAKE MICHIGAN"`) that `_map_state_to_usps` maps to
+`null` against a Silver schema that declares `STATE` `nullable=False` — so a
+full year of real NOAA data has apparently never actually passed this gate.
+See `docs/data_limitations.md` for both, and the CI `docker-smoke` job's
+scope note in `.github/workflows/ci.yml` for why the smoke test avoids them
+rather than treating them as Docker bugs.
+
+---
+
 ## Summary: divergences and why
 
 | Area | Ideal | Actual | Why |
@@ -235,6 +301,7 @@ these views, which this repo cannot author.
 | Jobs | Two schedules, running | Defined, disabled | 15-min job would pin compute 24/7 |
 | Compute | Job cluster + serverless SQL | **Serverless only** | Free Trial cannot allocate any supported node type |
 | Serving | Views + `.pbix` | Views only | `.pbix` is a manual desktop step |
+| Local dev/CI validation | Full Azure apply for every validation | Docker Compose + local volume (Azurite tried, rejected — storage protocol differs from ADLS Gen2) | Enables validation without an Azure subscription; Azurite's WASB driver hangs against this SDK, its ABFS driver has no Gen2 support at all |
 
 The pattern worth noticing: the gaps that are *documented* were scope decisions,
 and the one that was *undocumented* — the geography fan-out — was the actual bug.

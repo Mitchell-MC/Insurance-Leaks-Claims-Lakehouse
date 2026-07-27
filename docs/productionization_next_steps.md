@@ -95,3 +95,30 @@ source with a much larger single-comparison key-set.
 not one JSON blob per source) if a source's key-set ever grows past what's
 comfortable in a single cell — allows a real anti-join for tombstone
 detection instead of a Python-side set difference.
+
+## 8. FEMA/NOAA Silver DQ gates fail against real full-dataset data
+
+**Gap:** Discovered via the Docker Compose local-validation work (see
+`architecture_ideal_vs_actual.md`'s section 8), not previously exercised:
+`silver.fema_declarations` fails its `schema_unique_key` check against the
+full live OpenFEMA dataset (24 real duplicate-key groups), and
+`silver.noaa_storm_events` fails `schema_not_null_STATE` against any full
+real year (NOAA's marine-zone rows always map to null `STATE`). Both are
+detailed in `docs/data_limitations.md`.
+
+**What it takes:** A FEMA dedup rule mirroring NOAA's `dropDuplicates`
+pattern, and a decision on NOAA marine zones (drop them in Silver, or make
+`STATE` nullable) — both small, targeted fixes once prioritized.
+
+## Note: what's now verifiable locally vs. still requires real Azure
+
+**Verifiable in Docker Compose today** (see `architecture_ideal_vs_actual.md`'s
+section 8 and the README's "Running the pipeline locally with Docker
+Compose" section): ingestion writing/reading real Delta tables, Silver
+standardization/DQ logic, Processing joins/window functions, and Gold
+star-schema builds — all against real (if locally-stored) Delta tables,
+using the real `lakehouse` CLI entry point.
+
+**Still requires a real Azure/Databricks apply:** Unity Catalog governance,
+true ADLS Gen2 storage semantics, the wheel-based deploy path, scheduled-job
+execution/monitoring, and the serverless SQL warehouse serving Power BI.

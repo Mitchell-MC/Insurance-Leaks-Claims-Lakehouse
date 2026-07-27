@@ -102,7 +102,41 @@ uv run lakehouse gold
 ```
 
 Requires a real Databricks-attached SparkSession and Unity Catalog storage
-to actually read/write; see `infra/README.md` for provisioning.
+(`dbfs:/lakehouse`, the default `LAKEHOUSE_STORAGE_ROOT`) to actually
+read/write; see `infra/README.md` for provisioning. For a fully local run
+with no Azure/Databricks dependency at all, see the next section.
+
+## Running the pipeline locally with Docker Compose
+
+Runs the exact same `lakehouse` console script (`infra/jobs.tf`'s real
+Databricks Jobs invoke this identical entry point) against a local Spark
+session and real Delta tables stored on a Docker volume — no Azure or
+Databricks account needed for compute or storage. See
+[docs/architecture_ideal_vs_actual.md](docs/architecture_ideal_vs_actual.md)'s
+"Local validation (Docker Compose)" section for exactly what this does and
+doesn't simulate (storage is a plain Docker volume, not an Azure emulator —
+see that section for why Azurite was tried and rejected).
+
+`ingest` still needs real outbound internet access to FEMA/NOAA/NWS/Census —
+Docker only removes the Azure/Databricks dependency, not the public-API one.
+
+```bash
+docker compose build lakehouse
+
+docker compose run --rm lakehouse ingest --source historical
+docker compose run --rm lakehouse ingest --source nws_alerts_snapshots
+docker compose run --rm lakehouse silver
+docker compose run --rm lakehouse process
+docker compose run --rm lakehouse gold
+
+# or, chained:
+make run-pipeline
+```
+
+Each stage runs as its own `docker compose run`, mirroring
+`infra/jobs.tf`'s explicit task-dependency chain rather than hiding it
+behind one command — a stage can be inspected/debugged on its own.
+`docker compose down -v` resets the local lakehouse to empty.
 
 ## Branching
 

@@ -34,3 +34,38 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  docker-smoke:
+    # Reason: parallel with lint-type-test, not gated behind it -- a
+    # Docker/JDK-layer flake shouldn't block the fast lint/type/test
+    # feedback loop this repo has relied on with zero container involvement
+    # to date. Not yet required-to-pass in branch protection; revisit once
+    # this job has proven stable. See docs/architecture_ideal_vs_actual.md's
+    # "Local validation (Docker Compose)" section for what this does and
+    # doesn't prove.
+    #
+    # Scope note: this only runs `ingest --source nws_alerts_snapshots`, not
+    # the full pipeline. Verified by hand that a full `silver` run against
+    # real FEMA/NOAA data hits pre-existing, real data-quality gate failures
+    # unrelated to Docker (documented in docs/data_limitations.md) -- FEMA
+    # has genuine duplicate declaration/area keys, and NOAA's STATE column
+    # always includes non-US marine zones (e.g. "GULF OF MEXICO") that map
+    # to null against a schema that declares STATE non-nullable. Smoke-
+    # testing against that real data would make this job's pass/fail track
+    # source-data quality, not the Docker mechanism this job exists to
+    # verify. A full pipeline run is `make run-pipeline`, run by hand.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build lakehouse image
+        run: docker compose build lakehouse
+
+      # Reason: real outbound internet access to api.weather.gov -- GitHub-
+      # hosted runners have this by default. Accepted trade-off: this job's
+      # pass/fail is coupled to that public API's uptime. Also exercises a
+      # real Delta write, proving the spark-defaults.conf Delta-config-
+      # injection mechanism (io.delta.sql.DeltaSparkSessionExtension) works
+      # end-to-end in the built image.
+      - name: Run ingest (NWS alerts)
+        run: docker compose run --rm lakehouse ingest --source nws_alerts_snapshots
