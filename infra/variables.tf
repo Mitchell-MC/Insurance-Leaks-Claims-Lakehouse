@@ -107,3 +107,13 @@ variable "job_failure_webhook_id" {
   type        = string
   default     = ""
 }
+
+# Reason: a Databricks PAT (from the same profile the `databricks` CLI already
+# uses in ~/.databrickscfg) lets the databricks provider authenticate without
+# depending on an Azure CLI session -- see providers.tf. Set via
+# TF_VAR_databricks_pat; never commit a real value to terraform.tfvars.
+variable "databricks_pat" {
+  description = "Databricks personal access token, used to authenticate the databricks provider independently of Azure CLI/az login."
+  type        = string
+  sensitive   = true
+}

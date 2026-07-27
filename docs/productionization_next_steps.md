@@ -70,11 +70,28 @@ expected poll interval).
 
 ## 6. Geography reference re-ingestion cadence
 
-**Gap:** `docs/batch_vs_streaming_memo.md` notes the Census Gazetteer
-county reference (a yearly file) re-ingests daily alongside FEMA/NOAA,
-purely because the pipeline doesn't yet distinguish "reference data" from
-"operational data" as separate schedules.
+**Gap:** Partially closed. `ingestion/features/geography_reference/feature.py`
+now skips the actual download once the configured `census_gazetteer_year` has
+already been ingested (see `docs/data_limitations.md`), so the wasted-bandwidth
+part of this gap is fixed. What remains: the ingestor is still *invoked* daily
+alongside FEMA/NOAA on the same batch schedule — it just no-ops most days —
+rather than having its own low-frequency schedule, purely because the
+pipeline doesn't yet distinguish "reference data" from "operational data" as
+separate schedules.
 
 **What it takes:** A third, low-frequency (monthly or on-demand) Databricks
 Job for `ingestion/features/geography_reference/`, decoupled from the daily
-batch pipeline.
+batch pipeline, so the stage doesn't need to run (and immediately skip) daily.
+
+## 7. Watermark key-set storage doesn't scale past portfolio volumes
+
+**Gap:** `docs/data_limitations.md` — FEMA and NOAA's tombstone detection
+stores the previous run's full natural-key set as a JSON blob in one Delta
+cell (`_ingestion_state.extra`). Proportionate for FEMA's total record count
+and for NOAA's per-year, recent-years-only scope, but would not scale to a
+source with a much larger single-comparison key-set.
+
+**What it takes:** A dedicated `_ingestion_keys` table (one row per key,
+not one JSON blob per source) if a source's key-set ever grows past what's
+comfortable in a single cell — allows a real anti-join for tombstone
+detection instead of a Python-side set difference.

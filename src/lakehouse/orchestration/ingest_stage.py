@@ -8,6 +8,7 @@ from lakehouse.ingestion.features.fema_declarations.feature import FemaDeclarati
 from lakehouse.ingestion.features.geography_reference.feature import GeographyReferenceIngestor
 from lakehouse.ingestion.features.noaa_storm_events.feature import NoaaStormEventsIngestor
 from lakehouse.ingestion.features.nws_alerts.feature import NwsAlertsIngestor
+from lakehouse.ingestion.watermark_store import WatermarkStore
 from lakehouse.orchestration.run_logger import log_stage_run
 
 
@@ -19,13 +20,16 @@ def build_ingestors(settings: LakehouseSettings, spark: SparkSession) -> list[Ba
         spark (SparkSession): Active Spark session.
 
     Returns:
-        list[BaseIngestor]: One instance per configured source.
+        list[BaseIngestor]: One instance per configured source, all sharing
+            one `WatermarkStore` so every ingestor reads/writes the same
+            `_ingestion_state` table rather than opening it four times.
     """
+    watermark_store = WatermarkStore(settings, spark)
     return [
-        FemaDeclarationsIngestor(settings, spark),
-        NoaaStormEventsIngestor(settings, spark),
-        NwsAlertsIngestor(settings, spark),
-        GeographyReferenceIngestor(settings, spark),
+        FemaDeclarationsIngestor(settings, spark, watermark_store),
+        NoaaStormEventsIngestor(settings, spark, watermark_store),
+        NwsAlertsIngestor(settings, spark, watermark_store),
+        GeographyReferenceIngestor(settings, spark, watermark_store),
     ]
 
 

@@ -27,10 +27,30 @@ that attaches `_ingestion_metadata` and implements the retry/backoff from
 `LakehouseSettings`. NOAA schema drift is handled with
 `unionByName(allowMissingColumns=True)`.
 
-The gap is incrementality: every run is a full re-fetch appended to Bronze.
-At this data volume that is fine and simpler (KISS), but on a real FEMA history
-it would waste bandwidth and grow Bronze without bound. Watermarking is the
-first thing I would add.
+Incrementality is now implemented, per-source, backed by a shared
+`_ingestion_state` Delta table (`ingestion/watermark_store.py`):
+
+- **FEMA** filters the OpenFEMA API with `$filter=lastRefresh gt '<watermark>'`
+  after the first run, advancing the watermark to the newest `lastRefresh` seen.
+- **NOAA** always re-fetches the directory listing (required to discover
+  filenames) but only downloads a year's file if it's new, or within
+  `noaa_recheck_recent_years` (default 2) of the present *and* its
+  creation-date suffix is newer than the one already ingested — older years
+  are treated as frozen once ingested once.
+- **Geography** skips the download entirely once the configured
+  `census_gazetteer_year` has already been ingested — this file only changes
+  on a new Census vintage, so re-fetching it daily was pure waste.
+- **NWS alerts** still fetches the full active-alerts snapshot every call —
+  there is no "since" filter for "currently active alerts," so a watermark
+  here is only a last-polled-at marker, not a fetch filter. This is the
+  correct outcome for this source, not a remaining gap.
+
+A related, narrower gap closed alongside watermarking: FEMA and NOAA now flag
+a record whose natural key disappeared from the source between runs via an
+`_is_current` column, and Silver filters those rows out before its full
+overwrite — see `docs/data_limitations.md` for the real trade-off this makes
+(tombstone detection only runs on unfiltered/full fetches, and NOAA's is
+scoped to recently re-fetched years, not the full 30-year history).
 
 ---
 
@@ -207,7 +227,7 @@ these views, which this repo cannot author.
 
 | Area | Ideal | Actual | Why |
 |---|---|---|---|
-| Ingestion | Incremental, watermarked | Full re-fetch each run | Scope; fine at this volume |
+| Ingestion | Incremental, watermarked | **Implemented** — per-source watermarks + tombstone detection | Closed during this audit; see `data_limitations.md` for the remaining scale trade-offs |
 | Silver DQ | Gates promotion, quarantines | Records results only | Scope; documented |
 | Dedup | All sources | NOAA only | FEMA/geography assumed unique |
 | Gold grain | State-grain facts + conformed dims | **Fixed during this audit** | Was a real 254x fan-out bug |

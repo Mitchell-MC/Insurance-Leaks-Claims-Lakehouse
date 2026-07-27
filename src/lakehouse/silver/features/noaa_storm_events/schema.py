@@ -34,7 +34,7 @@ SCHEMA = TableSchema(
         ColumnSpec(
             name="EVENT_TYPE",
             data_type="string",
-            description="NOAA's event type (e.g. \"Tornado\", \"Flash Flood\").",
+            description='NOAA\'s event type (e.g. "Tornado", "Flash Flood").',
         ),
         ColumnSpec(
             name="EVENT_DATE",
@@ -45,7 +45,7 @@ SCHEMA = TableSchema(
         ColumnSpec(
             name="DAMAGE_PROPERTY_USD",
             data_type="double",
-            description="Parsed property damage estimate in USD (0.0 for blank/null source values).",
+            description="Parsed property damage estimate in USD (0.0 for blank/null source rows).",
             nullable=False,
             minimum=0.0,
         ),

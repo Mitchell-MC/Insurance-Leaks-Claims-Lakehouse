@@ -28,6 +28,12 @@ class LakehouseSettings(BaseSettings):
         max_retries (int): Maximum retry attempts for API/network calls.
         retry_delay_seconds (float): Initial delay before the first retry.
         retry_backoff_factor (float): Multiplier applied to the delay after each retry.
+        ingestion_state_table_name (str): Bronze-schema table name for the
+            watermark state store (see `ingestion.watermark_store`).
+        noaa_recheck_recent_years (int): Number of most-recent years to check
+            for a newer creation-date on every run. Older years are assumed
+            frozen once any watermark exists for them, since NOAA revises
+            recent years far more often than it revisits old ones.
     """
 
     model_config = SettingsConfigDict(env_prefix="LAKEHOUSE_", env_file=".env", extra="ignore")
@@ -55,6 +61,9 @@ class LakehouseSettings(BaseSettings):
     max_retries: int = Field(default=3, ge=0)
     retry_delay_seconds: float = Field(default=1.0, gt=0)
     retry_backoff_factor: float = Field(default=2.0, ge=1.0)
+
+    ingestion_state_table_name: str = "_ingestion_state"
+    noaa_recheck_recent_years: int = Field(default=2, gt=0)
 
     def bronze_table_path(self, table_name: str) -> str:
         """Builds the storage path for a bronze-layer Delta table.

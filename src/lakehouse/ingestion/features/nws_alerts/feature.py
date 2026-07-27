@@ -1,11 +1,12 @@
 """Bronze ingestor for National Weather Service active alert snapshots."""
 
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from pyspark.sql import DataFrame
 
 from lakehouse.ingestion.base_ingestor import BaseIngestor
+from lakehouse.ingestion.watermark_store import WatermarkRecord
 from lakehouse.silver.data_quality.checks import DQCheckResult, check_freshness
 
 # Reason: this ingestor runs on a schedule (infra/jobs.tf) to approximate a
@@ -21,7 +22,10 @@ class NwsAlertsIngestor(BaseIngestor):
 
     Each call captures the alerts active at that moment; scheduling repeated
     snapshots (Phase 6) is what approximates near-real-time ingestion for
-    this batch-oriented source.
+    this batch-oriented source. Every fetch still pulls the full active-alerts
+    snapshot -- there's no meaningful "since" filter for "currently active
+    alerts" -- but a watermark recording the last successful poll time is
+    still written, for consistency with the other three sources.
     """
 
     bronze_table_name = "nws_alerts_snapshots"
@@ -45,7 +49,21 @@ class NwsAlertsIngestor(BaseIngestor):
             json.dumps({**feature["properties"], "geometry": feature.get("geometry")})
             for feature in features
         ]
-        return self._spark.read.json(self._spark.sparkContext.parallelize(json_lines))
+        df = self._spark.read.json(self._spark.sparkContext.parallelize(json_lines))
+
+        # Reason: /alerts/active is a current-state snapshot with no "since"
+        # filter to apply -- there's nothing to make this fetch incremental.
+        # This watermark is purely a "last successfully polled at" marker for
+        # observability/consistency with the other three sources, distinct
+        # from dq_checks()'s freshness check on _ingestion_metadata.loaded_at.
+        self._watermark_store.set(
+            WatermarkRecord(
+                source_name=self.bronze_table_name,
+                watermark_value=datetime.now(UTC).isoformat(),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        return df
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
         """Flags a snapshot whose `_ingestion_metadata.loaded_at` is stale.

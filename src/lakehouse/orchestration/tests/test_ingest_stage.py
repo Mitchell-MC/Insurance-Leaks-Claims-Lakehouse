@@ -21,6 +21,14 @@ def test_build_ingestors_returns_one_per_source(spark: SparkSession) -> None:
     }
 
 
+def test_build_ingestors_share_one_watermark_store(spark: SparkSession) -> None:
+    """All four ingestors read/write the same WatermarkStore instance."""
+    ingestors = build_ingestors(LakehouseSettings(), spark)
+
+    stores = {id(ingestor._watermark_store) for ingestor in ingestors}
+    assert len(stores) == 1
+
+
 def test_run_ingest_stage_runs_and_writes_each_ingestor() -> None:
     """run_ingest_stage calls run() then write_bronze(result) for every ingestor."""
     raw_df = Mock(name="raw_df")

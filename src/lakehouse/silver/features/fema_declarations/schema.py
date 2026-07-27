@@ -26,7 +26,7 @@ SCHEMA = TableSchema(
         ColumnSpec(
             name="incidentType",
             data_type="string",
-            description="FEMA's incident type (e.g. \"Hurricane\", \"Flood\").",
+            description='FEMA\'s incident type (e.g. "Hurricane", "Flood").',
         ),
         ColumnSpec(
             name="declarationDate",

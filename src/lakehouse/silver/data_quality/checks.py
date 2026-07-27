@@ -317,9 +317,7 @@ def check_no_silent_drift(
     ]
     for column in numeric_columns:
         new_sum = new_df.agg(F.sum(F.col(column)).alias("_sum")).first()["_sum"] or 0.0
-        previous_sum = (
-            previous_df.agg(F.sum(F.col(column)).alias("_sum")).first()["_sum"] or 0.0
-        )
+        previous_sum = previous_df.agg(F.sum(F.col(column)).alias("_sum")).first()["_sum"] or 0.0
         results.append(
             _check_relative_change(
                 metric_name=f"sum_{column}",

@@ -150,6 +150,26 @@ class BaseSilverTransformer(ABC):
         previous_df = self._spark.read.format("delta").load(path)
         return check_no_silent_drift(silver_df, previous_df, self.drift_numeric_columns)
 
+    def filter_current(self, bronze_df: DataFrame) -> DataFrame:
+        """Drops Bronze rows the ingestor flagged as tombstoned (superseded upstream).
+
+        Args:
+            bronze_df (DataFrame): Raw records from the Bronze layer, which
+                may or may not carry an `_is_current` column -- only
+                ingestors with tombstone detection (FEMA, NOAA) attach it,
+                and rows appended before that existed have no value at all.
+
+        Returns:
+            DataFrame: `bronze_df` unchanged if it has no `_is_current`
+                column (nothing to filter); otherwise, rows with
+                `_is_current = false` excluded. A NULL value (pre-existing
+                row, or a source with no tombstone tracking) counts as
+                current, so it is never dropped by this filter.
+        """
+        if "_is_current" not in bronze_df.columns:
+            return bronze_df
+        return bronze_df.filter(F.col("_is_current") != False)  # noqa: E712
+
     def write_silver(self, df: DataFrame) -> None:
         """Writes a DataFrame to the Silver Delta table for this transformer.
 

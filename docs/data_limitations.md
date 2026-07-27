@@ -91,6 +91,40 @@ Both sources are expected to be naturally unique on those keys, which is why
 this hasn't bitten in practice — but "expected unique" plus "check that
 doesn't gate" is not the same as enforced.
 
+## Watermark state and tombstone detection
+
+**Status: implemented, with scale trade-offs accepted for this project's
+data volumes.**
+
+`ingestion/watermark_store.py` backs all four sources' incremental fetch
+logic with one Delta table, `bronze._ingestion_state`. Two related trade-offs
+are worth being explicit about:
+
+**Tombstone detection is not the same guarantee for every source.** FEMA and
+NOAA flag a record whose natural key disappeared from the source via an
+`_is_current` column (Silver filters these out before its overwrite), but:
+
+- FEMA's tombstone comparison only runs on an *unfiltered* fetch (no watermark
+  yet, or one explicitly reset) — a normal incremental run only sees
+  new/changed records, so it structurally cannot tell whether a record that
+  simply didn't change is still present upstream or was quietly retracted. A
+  retracted declaration is only caught the next time a full/unfiltered
+  re-sync happens, not on every incremental run.
+- NOAA's tombstone comparison is scoped to only the years actually re-fetched
+  this run (recent years, per `noaa_recheck_recent_years`), not the full
+  1996-present history — key-set-diffing three decades of events on every run
+  would be both slow and store an unbounded key-set in a single Delta cell.
+- Geography and NWS alerts have no tombstone logic at all: a Gazetteer vintage
+  year is a complete county list (no per-row deletes distinct from a new
+  vintage), and an NWS alert not appearing in the next snapshot is the normal,
+  expected case (expired/replaced), not a deletion.
+
+**The previous-run key-set is stored as a JSON blob**, in the watermark row's
+`extra` column. This is proportionate for FEMA's total record count (tens of
+thousands) but would not scale to key-set-diffing NOAA's full multi-million-row
+history in one Delta cell — which is exactly why NOAA's tombstone scope is
+narrowed to recent years above, rather than a general-purpose mechanism.
+
 ## NOAA Storm Events schema drift (1996-present)
 
 NOAA's column set has changed across the ~30 yearly bulk files (e.g. some

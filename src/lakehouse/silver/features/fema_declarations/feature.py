@@ -28,7 +28,8 @@ class FemaDeclarationsTransformer(BaseSilverTransformer):
         Returns:
             DataFrame: One row per disaster/area with typed date columns.
         """
-        return bronze_df.select(
+        current_bronze_df = self.filter_current(bronze_df)
+        return current_bronze_df.select(
             F.col("disasterNumber"),
             F.upper(F.trim(F.col("state"))).alias("state"),
             F.col("incidentType"),

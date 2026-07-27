@@ -3,6 +3,7 @@
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as F
 
+from lakehouse.ingestion.dedup_keys import noaa_event_key
 from lakehouse.silver.base_transformer import BaseSilverTransformer
 from lakehouse.silver.data_quality.checks import DQCheckResult, check_accepted_values
 from lakehouse.silver.data_quality.schema import check_against_schema
@@ -102,7 +103,8 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
         Returns:
             DataFrame: One row per distinct storm event, severity-banded.
         """
-        standardized = bronze_df.select(
+        current_bronze_df = self.filter_current(bronze_df)
+        standardized = current_bronze_df.select(
             F.col("EVENT_ID"),
             _map_state_to_usps(F.col("STATE")).alias("STATE"),
             F.col("CZ_NAME"),
@@ -114,18 +116,12 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
             F.col("MAGNITUDE"),
             F.col("DATA_YEAR"),
         )
-        dedup_key = F.coalesce(
+        dedup_key = noaa_event_key(
             F.col("EVENT_ID"),
-            F.sha2(
-                F.concat_ws(
-                    "|",
-                    F.col("STATE"),
-                    F.col("EVENT_TYPE"),
-                    F.col("EVENT_DATE").cast("string"),
-                    F.col("CZ_NAME"),
-                ),
-                256,
-            ),
+            F.col("STATE"),
+            F.col("EVENT_TYPE"),
+            F.col("EVENT_DATE"),
+            F.col("CZ_NAME"),
         )
         deduped = (
             standardized.withColumn("_DEDUP_KEY", dedup_key)

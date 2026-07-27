@@ -21,6 +21,12 @@ provider "azurerm" {
 }
 
 provider "databricks" {
-  host                        = azurerm_databricks_workspace.this.workspace_url
-  azure_workspace_resource_id = azurerm_databricks_workspace.this.id
+  # Reason: token auth (vs. azure_workspace_resource_id) means this provider
+  # doesn't need its own Azure AD token exchange -- it authenticates the same
+  # way the `databricks` CLI already does via ~/.databrickscfg. The azurerm
+  # provider above still needs its own Azure credential source (CLI session
+  # or ARM_* env vars) to initialize, since Terraform validates every
+  # declared provider block regardless of which resources actually change.
+  host  = azurerm_databricks_workspace.this.workspace_url
+  token = var.databricks_pat
 }

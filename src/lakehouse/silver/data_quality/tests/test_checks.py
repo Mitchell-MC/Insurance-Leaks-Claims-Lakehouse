@@ -301,9 +301,7 @@ def test_check_no_silent_drift_respects_custom_threshold(spark: SparkSession) ->
     lenient = check_no_silent_drift(
         new_df, previous_df, numeric_columns=[], max_relative_change=0.5
     )
-    strict = check_no_silent_drift(
-        new_df, previous_df, numeric_columns=[], max_relative_change=0.1
-    )
+    strict = check_no_silent_drift(new_df, previous_df, numeric_columns=[], max_relative_change=0.1)
 
     assert lenient[0].passed
     assert not strict[0].passed
