@@ -5,15 +5,10 @@ from pyspark.sql import functions as F
 
 from lakehouse.ingestion.dedup_keys import noaa_event_key
 from lakehouse.silver.base_transformer import BaseSilverTransformer
-from lakehouse.silver.data_quality.checks import DQCheckResult, check_accepted_values
+from lakehouse.silver.data_quality.checks import DQCheckResult
 from lakehouse.silver.data_quality.schema import check_against_schema
 from lakehouse.silver.features.noaa_storm_events.schema import SCHEMA
 from lakehouse.silver.us_state_codes import STATE_NAME_TO_USPS
-
-# Reason: the only values `_severity_band` ever derives -- see that function.
-# A value outside this set means the banding logic changed without this
-# check being updated, or a bug produced something else entirely.
-_SEVERITY_BANDS = {"severe", "moderate", "minor"}
 
 # Reason: these event types carry outsized claims-leakage risk regardless of
 # NOAA's self-reported dollar damage estimate (which is frequently a rough or
@@ -133,16 +128,14 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
         )
 
     def dq_checks(self, df: DataFrame) -> list[DQCheckResult]:
-        """Validates the declared schema plus the severity-band accepted-values rule.
+        """Validates the declared schema.
 
         Args:
             df (DataFrame): Transformed NOAA storm events.
 
         Returns:
             list[DQCheckResult]: Schema-derived checks (columns, types,
-                not-null, damage-amount range) plus the severity-band check.
+                not-null, damage-amount range, and SEVERITY_BAND's
+                accepted-values check -- see `SCHEMA`).
         """
-        return [
-            *check_against_schema(df, SCHEMA),
-            check_accepted_values(df, "SEVERITY_BAND", _SEVERITY_BANDS),
-        ]
+        return check_against_schema(df, SCHEMA)

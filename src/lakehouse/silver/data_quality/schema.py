@@ -12,7 +12,11 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import DataType
 
-from lakehouse.silver.data_quality.checks import DQCheckResult, check_expression
+from lakehouse.silver.data_quality.checks import (
+    DQCheckResult,
+    check_accepted_values,
+    check_expression,
+)
 
 
 class ColumnSpec(BaseModel):
@@ -32,6 +36,12 @@ class ColumnSpec(BaseModel):
             numeric columns. None means unconstrained.
         maximum (float | None): Maximum allowed value, inclusive, for
             numeric columns. None means unconstrained.
+        allowed_values (set[str] | None): The closed set of values this
+            column may hold (e.g. a derived band/category the code itself
+            controls). None means unconstrained. Mirrors dbt's
+            `accepted_values` test -- only appropriate for a small, closed
+            vocabulary; an open-ended external category (e.g. a source
+            system's free-text incident type) shouldn't use this.
     """
 
     name: str
@@ -41,6 +51,7 @@ class ColumnSpec(BaseModel):
     unique: bool = False
     minimum: float | None = None
     maximum: float | None = None
+    allowed_values: set[str] | None = None
 
 
 class TableSchema(BaseModel):
@@ -80,8 +91,9 @@ def check_against_schema(df: DataFrame, schema: TableSchema) -> list[DQCheckResu
             unexpected columns), one "schema_type_{column}" result per
             declared column present in `df`, one "schema_not_null_{column}"
             per non-nullable column, one "schema_unique_key" result if any
-            column is marked unique, and one "schema_range_{column}" result
-            per column with a minimum/maximum.
+            column is marked unique, one "schema_range_{column}" result per
+            column with a minimum/maximum, and one "accepted_values_{column}"
+            result per column with declared `allowed_values`.
     """
     results = [_check_columns_match(df, schema)]
     for column in schema.columns:
@@ -92,6 +104,8 @@ def check_against_schema(df: DataFrame, schema: TableSchema) -> list[DQCheckResu
             results.append(_check_column_not_null(df, column.name))
         if column.minimum is not None or column.maximum is not None:
             results.append(_check_column_range(df, column))
+        if column.allowed_values is not None:
+            results.append(check_accepted_values(df, column.name, column.allowed_values))
     if schema.unique_key_columns:
         results.append(_check_unique_key(df, schema.unique_key_columns))
     return results

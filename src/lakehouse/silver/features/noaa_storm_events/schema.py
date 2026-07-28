@@ -64,6 +64,7 @@ SCHEMA = TableSchema(
             data_type="string",
             description="Derived severe/moderate/minor band (see feature.py's _severity_band).",
             nullable=False,
+            allowed_values={"severe", "moderate", "minor"},
         ),
     ],
 )
