@@ -54,24 +54,27 @@ Tracked in [productionization_next_steps.md](productionization_next_steps.md)
 (Phase 8): a real complaint-data source needs either a data-sharing
 agreement with a state DOI/OIR, or a commercial data vendor — not a scraper.
 
-## Silver DQ checks are observational, not gating
+## Silver DQ checks gate promotion, but only by failing the whole run
 
-**Status: open — accepted for this phase.**
+**Status: implemented, with a coarser failure mode than ideal — accepted for
+this phase.**
 
 `BaseSilverTransformer.run()` (`silver/base_transformer.py`) runs each
-transformer's `dq_checks()` and records the pass/fail counts in the
-`_dq_metadata` struct it attaches to every Silver row, but it always writes
-Silver regardless of the result, and nothing in `orchestration/` reads
-`checks_failed` to block, quarantine, or alert. A failed null-geography or
-duplicate-key check is therefore *visible after the fact* (queryable from
-`_dq_metadata`) but has **zero effect on the pipeline** — bad rows still
-reach Gold.
+transformer's `dq_checks()` plus the silent-drift checks, then calls
+`raise_on_failures()`: any **error-severity** result that failed raises
+`DQCheckFailure`, which aborts the run before `write_silver()` — bad rows
+from a failing check never reach Silver or Gold.
+`_dq_metadata` (`checks_passed`/`checks_failed`) is still attached to every
+row that *does* get written, for observability, but it is no longer the only
+enforcement mechanism. `warn`-severity results (e.g. `check_no_silent_drift`
+by default) are recorded but don't block.
 
-This is a deliberate portfolio-scope tradeoff, not an oversight: gating
-requires deciding quarantine-vs-fail-the-run semantics per check and a place
-to route rejected rows. Closing it means having the stage runners inspect
-`_dq_metadata` and fail (or divert to a `silver_rejects` table) on
-critical-check failure.
+What's still coarse: a single failing error-severity check fails the *entire*
+transform, with no quarantine path for just the offending rows — there's no
+`silver_rejects` table, so one bad record blocks the whole source rather than
+being set aside while the rest of the run proceeds. Closing that means adding
+a per-row quarantine path to `BaseSilverTransformer`, not just deciding
+severity per check (already done).
 
 ## FEMA and geography Silver transformers detect duplicates but don't drop them
 
@@ -81,11 +84,12 @@ critical-check failure.
 duplicates (`dropDuplicates(["_DEDUP_KEY"])`). The FEMA and geography
 transformers only *check*:
 `check_no_duplicate_keys(df, ["disasterNumber", "designatedArea"])` and
-`check_no_duplicate_keys(df, ["GEOID"])` respectively. Combined with the
-non-gating behavior above, a duplicate from (for example) an OpenFEMA
-pagination retry would pass through to Silver and Gold, inflating
-`historical_declaration_frequency` and KPI-3's declaration counts, with only
-a `_dq_metadata` counter recording that it happened.
+`check_no_duplicate_keys(df, ["GEOID"])` respectively. Since these checks are
+error-severity by default, a duplicate now fails the whole run rather than
+silently reaching Gold — but that's a coarser outcome than the ideal
+(drop the duplicate, keep the run), not a corrected one: a duplicate from
+(for example) an OpenFEMA pagination retry blocks all of `silver.fema_declarations`
+until the underlying dedup rule is added, rather than being quietly dropped.
 
 Geography is expected to be naturally unique on `GEOID`. **FEMA is not** —
 this was assumed, not verified, until the Docker Compose local-validation

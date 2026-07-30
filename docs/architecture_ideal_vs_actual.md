@@ -67,16 +67,21 @@ to a rejects table and the run fails loudly rather than silently poisoning Gold.
 `_dq_metadata` all exist (`src/lakehouse/silver/`). Two honest gaps, both now
 documented in `docs/data_limitations.md`:
 
-- **DQ checks are observational, not gating.** `BaseSilverTransformer.run()`
-  records pass/fail counts but always writes Silver regardless. Nothing reads
-  `checks_failed` to block or quarantine. A failed duplicate-key check is
-  visible after the fact and has zero pipeline effect.
+- **DQ checks gate promotion, but only by failing the whole run.**
+  `BaseSilverTransformer.run()` calls `raise_on_failures()`, so any
+  error-severity check failure aborts the run before `write_silver()` — bad
+  rows never reach Silver or Gold. There is no quarantine path yet: a single
+  bad record fails the *entire* source rather than being set aside, so this
+  is a coarser gate than a real quarantine table would be, not a non-gate.
 - **Only NOAA actually dedupes.** FEMA and geography *check* for duplicates
-  without dropping them, so an OpenFEMA pagination retry would flow through to
-  Gold and inflate declaration counts.
+  without dropping them, so an OpenFEMA pagination retry now fails the whole
+  `silver.fema_declarations` run (the check is error-severity) instead of
+  quietly inflating declaration counts in Gold — confirmed against real
+  OpenFEMA data, see the finding at the end of section 8.
 
-Both are accepted scope tradeoffs, not oversights — but "expected unique" plus
-"a check that doesn't gate" is not the same as enforced.
+Both are accepted scope tradeoffs, not oversights — but "expected unique"
+plus "a check that fails the run instead of dropping the bad rows" is not
+the same as a real quarantine.
 
 There is also no Silver slice for NWS alerts: they are consumed directly from
 Bronze by the processing layer. That is deliberate (a point-in-time snapshot
@@ -294,7 +299,7 @@ rather than treating them as Docker bugs.
 | Area | Ideal | Actual | Why |
 |---|---|---|---|
 | Ingestion | Incremental, watermarked | **Implemented** — per-source watermarks + tombstone detection | Closed during this audit; see `data_limitations.md` for the remaining scale trade-offs |
-| Silver DQ | Gates promotion, quarantines | Records results only | Scope; documented |
+| Silver DQ | Gates promotion, quarantines | Fails the whole run, no quarantine | Scope; documented |
 | Dedup | All sources | NOAA only | FEMA/geography assumed unique |
 | Gold grain | State-grain facts + conformed dims | **Fixed during this audit** | Was a real 254x fan-out bug |
 | Complaint data | Real DOI/OIR feed | Empty table + documented proxy | No structured public source exists |

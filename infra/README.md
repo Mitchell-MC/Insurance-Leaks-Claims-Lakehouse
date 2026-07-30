@@ -45,15 +45,28 @@ continuously-billing pieces are behind flags, both defaulting to `false`:
 | `enable_scheduled_jobs` | `jobs.tf`'s two Databricks Jobs | `lakehouse-alerts-snapshot` runs **every 15 minutes** against a cluster with `autotermination_minutes = 30`, so the cluster never idles down — effectively 24/7 compute. |
 | `enable_sql_warehouse` | `sql_warehouse.tf`'s Power BI warehouse | Only needed when actually building the `.pbix` against Gold. Serverless with a 10-minute auto-stop, so cost is bursty rather than constant. |
 
+`enable_verification_cluster` (default `true` in `variables.tf`, but `false`
+in this repo's own `terraform.tfvars`) creates the single-node VM cluster
+described above. It's set `false` here not for cost but because it doesn't
+provision at all on an Azure Free Trial subscription: every Databricks-
+supported node type is either unavailable in `eastus2` or rejected as
+`NotAvailableForSubscription` — a capacity restriction, not a quota limit.
+See [docs/architecture_ideal_vs_actual.md](../docs/architecture_ideal_vs_actual.md)'s
+"Compute" section for the exact failure sequence. Leave it `false` unless
+your subscription can actually allocate a supported node type; the
+serverless SQL warehouse (`enable_sql_warehouse`) provides Unity Catalog
+query access without it.
+
 Enable them deliberately in `terraform.tfvars` when you want that behavior:
 
 ```hcl
-enable_scheduled_jobs = true
-enable_sql_warehouse  = true
+enable_scheduled_jobs      = true
+enable_sql_warehouse       = true
+enable_verification_cluster = true  # only if your subscription supports it
 ```
 
-The verification cluster auto-terminates after 30 idle minutes, so with both
-flags off an idle deployment costs storage plus the workspace itself.
+With `enable_verification_cluster` also off, an idle deployment costs
+storage plus the workspace itself.
 
 Run `terraform destroy` when you're done demoing.
 
