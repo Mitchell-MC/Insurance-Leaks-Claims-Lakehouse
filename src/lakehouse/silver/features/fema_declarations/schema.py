@@ -29,6 +29,48 @@ SCHEMA = TableSchema(
             description='FEMA\'s incident type (e.g. "Hurricane", "Flood").',
         ),
         ColumnSpec(
+            name="declarationType",
+            data_type="string",
+            description=(
+                "FEMA's 2-character declaration type: DR (major disaster), "
+                "EM (emergency), or FM (fire management assistance)."
+            ),
+            nullable=False,
+            allowed_values={"DR", "EM", "FM"},
+        ),
+        ColumnSpec(
+            name="region",
+            data_type="long",
+            description="FEMA region number (I-X) handling the declaration.",
+            minimum=1,
+            maximum=10,
+        ),
+        ColumnSpec(
+            name="ihProgramDeclared",
+            data_type="boolean",
+            description="Whether the Individuals and Households program was declared.",
+        ),
+        ColumnSpec(
+            name="iaProgramDeclared",
+            data_type="boolean",
+            description="Whether the Individual Assistance program was declared.",
+        ),
+        ColumnSpec(
+            name="paProgramDeclared",
+            data_type="boolean",
+            description="Whether the Public Assistance program was declared.",
+        ),
+        ColumnSpec(
+            name="hmProgramDeclared",
+            data_type="boolean",
+            description="Whether the Hazard Mitigation program was declared.",
+        ),
+        ColumnSpec(
+            name="tribalRequest",
+            data_type="boolean",
+            description="Whether the declaration request came from a tribal government.",
+        ),
+        ColumnSpec(
             name="declarationDate",
             data_type="date",
             description="Date FEMA issued the disaster declaration.",

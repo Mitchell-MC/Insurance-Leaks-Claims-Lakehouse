@@ -21,6 +21,46 @@ _ALWAYS_SEVERE_EVENT_TYPES = {
 }
 
 
+def _col_or_null(df: DataFrame, name: str) -> Column:
+    """Returns `df[name]`, or a typed null literal if `name` isn't a column.
+
+    Args:
+        df (DataFrame): DataFrame to look up the column on.
+        name (str): Column name to reference.
+
+    Returns:
+        Column: The real column, or `NULL` if Bronze's accumulated schema
+            lacks it -- NOAA's column set has drifted across 1996-present
+            (see docs/data_limitations.md), and Bronze's per-run
+            `unionByName(allowMissingColumns=True)` only guarantees a
+            column's presence within a single fetch, not across every
+            historical append to the Delta table. Mirrors the same guard in
+            `ingestion/features/noaa_storm_events/feature.py`.
+    """
+    return F.col(name) if name in df.columns else F.lit(None).cast("string")
+
+
+def _null_if_blank(column: Column) -> Column:
+    """Normalizes a blank/empty string to a true null.
+
+    Args:
+        column (Column): Raw string column.
+
+    Returns:
+        Column: `column` unchanged, or null if it was null or blank.
+            Reason: NOAA's CSV reader parses an unset optional field (e.g.
+            MAGNITUDE_TYPE on a non-wind/hail event, TOR_F_SCALE on a
+            non-tornado event) as `""`, not a true null -- confirmed against
+            live NOAA data, where this showed up as the majority of rows
+            failing `accepted_values` checks despite `check_accepted_values`
+            already excluding real nulls. Mirrors `_parse_damage_property`'s
+            identical blank-string handling below.
+    """
+    return F.when(column.isNull() | (F.trim(column) == ""), F.lit(None).cast("string")).otherwise(
+        column
+    )
+
+
 def _map_state_to_usps(column: Column) -> Column:
     """Maps a full state/territory name (e.g. "TEXAS") to its USPS code ("TX").
 
@@ -104,6 +144,14 @@ class NoaaStormEventsTransformer(BaseSilverTransformer):
             _map_state_to_usps(F.col("STATE")).alias("STATE"),
             F.col("CZ_NAME"),
             F.col("EVENT_TYPE"),
+            _null_if_blank(_col_or_null(current_bronze_df, "CZ_TYPE")).alias("CZ_TYPE"),
+            _null_if_blank(_col_or_null(current_bronze_df, "MAGNITUDE_TYPE")).alias(
+                "MAGNITUDE_TYPE"
+            ),
+            _null_if_blank(_col_or_null(current_bronze_df, "TOR_F_SCALE")).alias("TOR_F_SCALE"),
+            _null_if_blank(_col_or_null(current_bronze_df, "FLOOD_CAUSE")).alias("FLOOD_CAUSE"),
+            _null_if_blank(_col_or_null(current_bronze_df, "BEGIN_AZIMUTH")).alias("BEGIN_AZIMUTH"),
+            _null_if_blank(_col_or_null(current_bronze_df, "END_AZIMUTH")).alias("END_AZIMUTH"),
             F.to_timestamp(F.col("BEGIN_DATE_TIME"), "dd-MMM-yy HH:mm:ss")
             .cast("date")
             .alias("EVENT_DATE"),

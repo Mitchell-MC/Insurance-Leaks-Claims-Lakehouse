@@ -33,6 +33,13 @@ class FemaDeclarationsTransformer(BaseSilverTransformer):
             F.col("disasterNumber"),
             F.upper(F.trim(F.col("state"))).alias("state"),
             F.col("incidentType"),
+            F.col("declarationType"),
+            F.col("region"),
+            F.col("ihProgramDeclared"),
+            F.col("iaProgramDeclared"),
+            F.col("paProgramDeclared"),
+            F.col("hmProgramDeclared"),
+            F.col("tribalRequest"),
             # Reason: OpenFEMA returns ISO 8601 datetimes (e.g.
             # "2020-08-27T00:00:00.000Z"); only the date portion is needed,
             # and slicing it avoids brittle datetime-format parsing.
