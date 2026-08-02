@@ -13,6 +13,16 @@ def _row(**overrides: object) -> Row:
         "STATE": "TEXAS",
         "CZ_NAME": "HARRIS",
         "EVENT_TYPE": "Thunderstorm Wind",
+        "CZ_TYPE": "C",
+        "MAGNITUDE_TYPE": "MG",
+        # Reason: a column that's None in every row of the test DataFrame defeats
+        # PySpark's schema inference (it can't determine a NullType column's real
+        # type), so these defaults use real values even though the field is
+        # nullable in production (null for non-tornado/non-flood events).
+        "TOR_F_SCALE": "EF1",
+        "FLOOD_CAUSE": "Heavy Rain",
+        "BEGIN_AZIMUTH": "ENE",
+        "END_AZIMUTH": "ENE",
         "BEGIN_DATE_TIME": "27-AUG-20 08:00:00",
         "DAMAGE_PROPERTY": "25.00K",
         "MAGNITUDE": "60",
@@ -86,6 +96,69 @@ def test_transform_bands_severity(spark: SparkSession) -> None:
     assert rows["2"]["SEVERITY_BAND"] == "minor"
     assert rows["3"]["SEVERITY_BAND"] == "moderate"
     assert rows["4"]["SEVERITY_BAND"] == "severe"
+
+
+def test_transform_nulls_drift_prone_columns_absent_from_an_older_years_schema(
+    spark: SparkSession,
+) -> None:
+    """A Bronze batch lacking a drift-prone column (e.g. an early NOAA year) still transforms.
+
+    Reason: NOAA's column set has drifted across 1996-present (some early
+    years lack MAGNITUDE_TYPE and similar fields -- see
+    docs/data_limitations.md), so these columns must degrade to null rather
+    than raise when Bronze's schema doesn't include them.
+    """
+    transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
+    row = _row().asDict()
+    for column in (
+        "CZ_TYPE",
+        "MAGNITUDE_TYPE",
+        "TOR_F_SCALE",
+        "FLOOD_CAUSE",
+        "BEGIN_AZIMUTH",
+        "END_AZIMUTH",
+    ):
+        del row[column]
+    bronze_df = spark.createDataFrame([Row(**row)])
+
+    result = transformer.transform(bronze_df).collect()
+
+    assert result[0]["CZ_TYPE"] is None
+    assert result[0]["MAGNITUDE_TYPE"] is None
+    assert result[0]["TOR_F_SCALE"] is None
+    assert result[0]["FLOOD_CAUSE"] is None
+    assert result[0]["BEGIN_AZIMUTH"] is None
+    assert result[0]["END_AZIMUTH"] is None
+
+
+def test_transform_nulls_blank_string_drift_prone_columns(spark: SparkSession) -> None:
+    """A Bronze row where a drift-prone column is `""` (not null) still nulls out in Silver.
+
+    Reason: confirmed against live NOAA data -- CSV rows where these fields
+    are legitimately unset (e.g. MAGNITUDE_TYPE on a non-wind/hail event)
+    parse as an empty string, not a true null, which the accepted_values
+    check does not exempt the way it exempts real nulls.
+    """
+    transformer = NoaaStormEventsTransformer(LakehouseSettings(), spark)
+    bronze_df = spark.createDataFrame(
+        [
+            _row(
+                MAGNITUDE_TYPE="",
+                TOR_F_SCALE="",
+                FLOOD_CAUSE="",
+                BEGIN_AZIMUTH="",
+                END_AZIMUTH="",
+            )
+        ]
+    )
+
+    result = transformer.transform(bronze_df).collect()
+
+    assert result[0]["MAGNITUDE_TYPE"] is None
+    assert result[0]["TOR_F_SCALE"] is None
+    assert result[0]["FLOOD_CAUSE"] is None
+    assert result[0]["BEGIN_AZIMUTH"] is None
+    assert result[0]["END_AZIMUTH"] is None
 
 
 def test_transform_dedupes_by_event_id(spark: SparkSession) -> None:

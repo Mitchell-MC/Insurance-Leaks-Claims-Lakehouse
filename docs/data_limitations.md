@@ -143,11 +143,19 @@ NOAA's column set has changed across the ~30 yearly bulk files (e.g. some
 early years lack `MAGNITUDE_TYPE` or `CATEGORY`). Bronze ingestion
 (`ingestion/features/noaa_storm_events/feature.py`) already tolerates this
 via `unionByName(allowMissingColumns=True)`. The Silver transformer
-(`silver/features/noaa_storm_events/feature.py`) only selects the small
-column subset the KPIs actually need (`STATE`, `CZ_NAME`, `EVENT_TYPE`,
+(`silver/features/noaa_storm_events/feature.py`) selects a core column
+subset the KPIs actually need (`STATE`, `CZ_NAME`, `EVENT_TYPE`,
 `BEGIN_DATE_TIME`, `DAMAGE_PROPERTY`, `MAGNITUDE`, `EVENT_ID`), all of which
-are present across the full 1996-present range, so drift in less-used
-columns doesn't propagate past Bronze.
+are present across the full 1996-present range, directly via `F.col()`.
+
+A second set of fixed-cardinality descriptive columns (`CZ_TYPE`,
+`MAGNITUDE_TYPE`, `TOR_F_SCALE`, `FLOOD_CAUSE`, `BEGIN_AZIMUTH`,
+`END_AZIMUTH`) is also selected, but through the transformer's `_col_or_null`
+helper rather than a bare `F.col()` -- since Bronze writes use plain
+`.mode("append")` with no `mergeSchema` configured, a year whose file
+genuinely lacks one of these columns would otherwise raise on read instead
+of degrading to null. `_col_or_null` mirrors the identically-named guard in
+the Bronze ingestor.
 
 ## NOAA `STATE` is declared non-nullable, but real data always has nulls there
 
