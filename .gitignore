@@ -67,3 +67,7 @@ derby.log
 
 # Local tool run logs (e.g. ad-hoc dbt CLI invocations)
 logs/
+
+# Power BI Desktop local export (docker-compose.yml's `export` stage output --
+# regenerate with `docker compose run --rm lakehouse export`)
+powerbi-export/

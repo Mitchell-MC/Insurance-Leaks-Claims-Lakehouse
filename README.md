@@ -40,7 +40,11 @@ All 8 phases of the build are complete:
 - **Phase 7** — Power BI spec: `docs/reporting_views.sql`,
   `docs/roi_assumptions.md`, `docs/dashboard_usage_guide.md`,
   `infra/sql_warehouse.tf`. The `.pbix` itself is a manual Power BI Desktop
-  step against these views — not something this repo can author.
+  step against these views — not something this repo can author. A local
+  `export` stage (`orchestration/export_stage.py`) also writes Gold to
+  Parquet for Power BI Desktop's Folder connector, so the dashboard can be
+  built against real local output with no Azure deployment — see
+  `docs/dashboard_usage_guide.md`'s "Local Power BI Desktop" section.
 - **Phase 8** — portfolio packaging: this README, `docs/architecture.md`,
   `docs/interview_walkthrough.md`, `docs/productionization_next_steps.md`.
 
@@ -63,7 +67,7 @@ src/lakehouse/
     processing/        Phase 4: regional join, rolling window metrics,
                        catastrophe pressure score
     gold/             Gold: dimensions/, facts/, leakage_risk_metric
-    orchestration/    Stage runners (ingest/silver/process/gold) + run_logger
+    orchestration/    Stage runners (ingest/silver/process/gold/export) + run_logger
     main.py           CLI entry point (`lakehouse <stage>`), the console
                        script infra/jobs.tf's Databricks Jobs invoke
 infra/                Terraform: Azure resource group, Databricks workspace,
@@ -99,6 +103,7 @@ uv run lakehouse ingest --source nws_alerts_snapshots
 uv run lakehouse silver
 uv run lakehouse process
 uv run lakehouse gold
+uv run lakehouse export   # Gold -> Parquet, for Power BI Desktop's Folder connector
 ```
 
 Requires a real Databricks-attached SparkSession and Unity Catalog storage
@@ -128,6 +133,7 @@ docker compose run --rm lakehouse ingest --source nws_alerts_snapshots
 docker compose run --rm lakehouse silver
 docker compose run --rm lakehouse process
 docker compose run --rm lakehouse gold
+docker compose run --rm lakehouse export
 
 # or, chained:
 make run-pipeline
@@ -137,6 +143,12 @@ Each stage runs as its own `docker compose run`, mirroring
 `infra/jobs.tf`'s explicit task-dependency chain rather than hiding it
 behind one command — a stage can be inspected/debugged on its own.
 `docker compose down -v` resets the local lakehouse to empty.
+
+`export` writes every Gold table to `./powerbi-export/<table_name>/` as
+Parquet — a bind mount, not the `lakehouse-data` named volume, since Power
+BI Desktop runs on the host and needs to see these files directly. See
+[docs/dashboard_usage_guide.md](docs/dashboard_usage_guide.md)'s "Local
+Power BI Desktop" section for loading them into a real report.
 
 ## Branching
 

@@ -23,6 +23,11 @@ services:
     volumes:
       - ./src:/app/src
       - lakehouse-data:/data/lakehouse
+      # Reason: a bind mount, not a named volume like lakehouse-data --
+      # Power BI Desktop runs on the host, not in a container, so the
+      # `export` stage's Parquet output needs to land somewhere the host
+      # filesystem can actually see. See docs/dashboard_usage_guide.md.
+      - ./powerbi-export:/data/powerbi_export
 
 volumes:
   lakehouse-data:

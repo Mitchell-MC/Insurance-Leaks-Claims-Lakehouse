@@ -9,3 +9,4 @@ run-pipeline:
 	docker compose run --rm lakehouse silver
 	docker compose run --rm lakehouse process
 	docker compose run --rm lakehouse gold
+	docker compose run --rm lakehouse export

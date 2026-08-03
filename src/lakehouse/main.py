@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 from pyspark.sql import SparkSession
 
 from lakehouse.config.config import LakehouseSettings
+from lakehouse.orchestration.export_stage import run_export_stage
 from lakehouse.orchestration.gold_stage import run_gold_stage
 from lakehouse.orchestration.ingest_stage import build_ingestors, run_ingest_stage
 from lakehouse.orchestration.process_stage import run_process_stage
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "stage",
-        choices=["ingest", "silver", "process", "gold"],
+        choices=["ingest", "silver", "process", "gold", "export"],
         help="Pipeline stage to run.",
     )
     parser.add_argument(
@@ -128,10 +129,21 @@ def _run_gold(settings: LakehouseSettings, spark: SparkSession) -> None:
         df.write.format("delta").mode("overwrite").save(settings.gold_table_path(table_name))
 
 
+def _run_export(settings: LakehouseSettings, spark: SparkSession) -> None:
+    """Exports every Gold Delta table to Parquet for local BI tools (e.g. Power BI Desktop).
+
+    Args:
+        settings (LakehouseSettings): Catalog/storage configuration.
+        spark (SparkSession): Active Spark session.
+    """
+    run_export_stage(spark, settings)
+
+
 _STAGE_RUNNERS: dict[str, Callable[[LakehouseSettings, SparkSession], None]] = {
     "silver": _run_silver,
     "process": _run_process,
     "gold": _run_gold,
+    "export": _run_export,
 }
 
 

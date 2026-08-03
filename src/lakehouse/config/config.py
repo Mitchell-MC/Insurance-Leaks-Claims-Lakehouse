@@ -34,6 +34,9 @@ class LakehouseSettings(BaseSettings):
             for a newer creation-date on every run. Older years are assumed
             frozen once any watermark exists for them, since NOAA revises
             recent years far more often than it revisits old ones.
+        powerbi_export_root (str): Root path the `export` stage writes Gold
+            tables to as Parquet, for local BI tools with no Delta connector
+            (e.g. Power BI Desktop) -- see docs/dashboard_usage_guide.md.
     """
 
     model_config = SettingsConfigDict(env_prefix="LAKEHOUSE_", env_file=".env", extra="ignore")
@@ -64,6 +67,8 @@ class LakehouseSettings(BaseSettings):
 
     ingestion_state_table_name: str = "_ingestion_state"
     noaa_recheck_recent_years: int = Field(default=2, gt=0)
+
+    powerbi_export_root: str = "file:///data/powerbi_export"
 
     def bronze_table_path(self, table_name: str) -> str:
         """Builds the storage path for a bronze-layer Delta table.
@@ -97,3 +102,16 @@ class LakehouseSettings(BaseSettings):
             str: Fully qualified storage path under the gold schema.
         """
         return f"{self.storage_root}/{self.gold_schema}/{table_name}"
+
+    def powerbi_export_path(self, table_name: str) -> str:
+        """Builds the Parquet export path for one Gold table.
+
+        Args:
+            table_name (str): Unqualified table name (e.g. "fact_catastrophe_event").
+
+        Returns:
+            str: Path under `powerbi_export_root`, independent of `storage_root`
+                since production `storage_root` values (`dbfs:/...`,
+                `abfss://...`) aren't paths a local BI tool can open directly.
+        """
+        return f"{self.powerbi_export_root}/{table_name}"
