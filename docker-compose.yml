@@ -1,14 +1,10 @@
 # Local simulation of the pipeline infra/*.tf provisions for real -- see
 # docs/architecture_ideal_vs_actual.md's "Local validation (Docker Compose)"
 # section for exactly what is and isn't simulated. Storage here is a plain
-# local Docker volume, not an Azure emulator: Azurite was evaluated and
-# rejected after direct testing -- its Blob (wasbs://) driver hung on an
-# unresolved hadoop-azure-SDK/Azurite response incompatibility, and its ABFS
-# (abfs://) driver is confirmed (from Azurite's own source, not just its
-# error messages) to have no hierarchical-namespace/Gen2 support at all in
-# this version. A local volume makes an honest, narrower claim instead:
-# "storage root is swappable via LAKEHOUSE_STORAGE_ROOT," not "this behaves
-# like ADLS Gen2."
+# local Docker volume, not an Azure storage emulator -- no local emulator
+# faithfully reproduces ADLS Gen2's hierarchical-namespace behavior, so this
+# makes an honest, narrower claim instead: "storage root is swappable via
+# LAKEHOUSE_STORAGE_ROOT," not "this behaves like ADLS Gen2."
 
 services:
   lakehouse:
@@ -23,6 +19,11 @@ services:
     volumes:
       - ./src:/app/src
       - lakehouse-data:/data/lakehouse
+      # Reason: a bind mount, not a named volume like lakehouse-data --
+      # Power BI Desktop runs on the host, not in a container, so the
+      # `export` stage's Parquet output needs to land somewhere the host
+      # filesystem can actually see. See docs/dashboard_usage_guide.md.
+      - ./powerbi-export:/data/powerbi_export
 
 volumes:
   lakehouse-data:

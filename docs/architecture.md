@@ -120,6 +120,5 @@ much as being precise about production's real shape:
 
 What this does **not** simulate: Unity Catalog governance/permissions, ADLS
 Gen2 hierarchical-namespace semantics, cluster autoscaling/autotermination,
-job scheduling, and the wheel-based deploy path. Storage emulation
-(Azurite) was tried and rejected after direct testing, not skipped for
-convenience — see `architecture_ideal_vs_actual.md` for the specifics.
+job scheduling, and the wheel-based deploy path — see
+`architecture_ideal_vs_actual.md` for the specifics.

@@ -7,7 +7,98 @@ dashboard builder works from in Power BI Desktop — this project does not
 ship a `.pbix` file (a binary format outside what this repo can author),
 only the Gold-layer views (`reporting_views.sql`) and this guide.
 
-## Connecting Power BI to the data
+There are two ways to get this into Power BI Desktop, and they trade off
+very differently:
+
+| | Local export | Production Azure |
+|---|---|---|
+| Cost | Free | Real Azure billing (serverless SQL warehouse) |
+| Setup | `make run-pipeline` (already Dockerized) | `terraform apply` against a real subscription |
+| Refresh | Manual: rerun pipeline, click Refresh in Power BI | Automatic: DirectQuery reflects each Gold run |
+| What it proves | The pipeline logic and Gold output are correct | The actual production serving path works end-to-end |
+
+## Local Power BI Desktop (Docker Compose export)
+
+The fastest way to see real numbers in Power BI Desktop today, no Azure
+subscription required. The `export` stage (`orchestration/export_stage.py`)
+writes every Gold Delta table to Parquet, and `docker-compose.yml` bind-mounts
+that output to `./powerbi-export/` on the host — a plain Docker volume
+(like `lakehouse-data`) isn't visible outside the container, so this stage
+specifically needs a bind mount instead.
+
+1. Run the full pipeline, including the new `export` step:
+   ```bash
+   make run-pipeline
+   ```
+   Or, if Gold is already built, just the export step on its own:
+   ```bash
+   docker compose run --rm lakehouse export
+   ```
+2. In Power BI Desktop: **Get Data → Folder**, browse to
+   `<repo>/powerbi-export/<table_name>/` (one call per table — each Gold
+   table is its own subfolder, e.g. `powerbi-export/fact_catastrophe_event/`,
+   containing one or more Spark-written `part-*.parquet` files, not a single
+   file Power BI's plain Parquet connector expects).
+3. In the Folder dialog, **Combine & Transform** and filter to `.parquet`
+   extension files — this merges the part-files into one table, the same
+   pattern used for any Spark output folder.
+4. Repeat per table: `dim_date`, `dim_geography`, `dim_geography_state`,
+   `dim_event_type`, `dim_alert_status`, `fact_catastrophe_event`,
+   `fact_regional_alert_activity`, `fact_complaint_trend`,
+   `leakage_risk_metric`. Build the same three pages described below from
+   these tables directly, joining on the same keys `reporting_views.sql`
+   uses (`state_geography_key`, `date_key`).
+
+This is **Import, not DirectQuery** — Power BI loads a static snapshot.
+Rerunning `make run-pipeline` does not update the report automatically;
+re-run the `export` step, then click **Refresh** in Power BI Desktop.
+
+## Production Azure/Databricks path
+
+The architecture `docs/architecture_ideal_vs_actual.md` section 7 calls
+"ideal": Power BI connects live via DirectQuery, so a Gold refresh shows up
+without any manual export/refresh step. This is what `infra/*.tf` actually
+provisions, and none of it is invented for this doc — every resource named
+below exists in this repo today, just not deployed by default:
+
+1. **Resource group + Databricks workspace** (`infra/main.tf`,
+   `azurerm_databricks_workspace.this`) — Premium SKU, required for Unity
+   Catalog.
+2. **ADLS Gen2 storage** (`azurerm_storage_account.lakehouse`,
+   `is_hns_enabled = true`) + a private container
+   (`azurerm_storage_container.lakehouse`) as the actual Delta table storage.
+3. **Managed-identity access** (`azurerm_databricks_access_connector.this` +
+   a `Storage Blob Data Contributor` role assignment) — lets Unity Catalog
+   read/write the storage account with no stored secret.
+4. **Unity Catalog** (`infra/catalog.tf`): a storage credential and external
+   location pointing at that storage account, then `databricks_catalog
+   .lakehouse` with `bronze`/`silver`/`gold` schemas — this is what
+   `LakehouseSettings.catalog_name`/`bronze_schema`/`silver_schema`/
+   `gold_schema` actually target once `storage_root` points at `abfss://`
+   instead of the local `file:///data/lakehouse` Docker uses.
+5. **The Power BI SQL warehouse** (`infra/sql_warehouse.tf`,
+   `databricks_sql_endpoint.power_bi`) — serverless, `2X-Small`, auto-stops
+   after 10 minutes idle, so cost tracks actual dashboard usage rather than
+   uptime. Gated behind `var.enable_sql_warehouse` (**default `false`**) —
+   this resource, and the scheduled jobs in `infra/jobs.tf`
+   (`var.enable_scheduled_jobs`, also default `false`), are the only
+   continuously-billing pieces here, so a plain `terraform apply` provisions
+   everything except them.
+
+**Prerequisites this repo assumes but doesn't provision:** a Unity Catalog
+metastore already assigned to the workspace's region at the Databricks
+account level (`infra/catalog.tf`'s own comment), and a Databricks personal
+access token supplied as `TF_VAR_databricks_pat` (`providers.tf` uses this
+instead of an Azure CLI session).
+
+**To actually stand this up:** `terraform apply` from `infra/` with
+`storage_account_name`, `cluster_single_user_name`, and
+`TF_VAR_databricks_pat` set, plus `-var enable_sql_warehouse=true` once
+Gold has real data to query. This provisions real, billed Azure/Databricks
+resources against your subscription — not something to run without deciding
+to take on that cost deliberately.
+
+## Connecting Power BI to the data (once deployed)
 
 1. Power BI Desktop → Get Data → Databricks.
 2. Server hostname / HTTP path: from the SQL warehouse provisioned by

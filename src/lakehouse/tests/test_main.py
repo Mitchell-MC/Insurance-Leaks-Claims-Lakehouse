@@ -8,9 +8,9 @@ from lakehouse.main import _run_ingest, build_parser, main
 
 
 def test_build_parser_accepts_valid_stage() -> None:
-    """Parser accepts each of the four defined pipeline stages."""
+    """Parser accepts each of the five defined pipeline stages."""
     parser = build_parser()
-    for stage in ["ingest", "silver", "process", "gold"]:
+    for stage in ["ingest", "silver", "process", "gold", "export"]:
         args = parser.parse_args([stage])
         assert args.stage == stage
 

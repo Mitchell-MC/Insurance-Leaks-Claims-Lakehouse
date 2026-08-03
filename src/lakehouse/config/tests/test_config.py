@@ -44,6 +44,19 @@ def test_gold_table_path_joins_storage_root_and_schema() -> None:
     )
 
 
+def test_powerbi_export_path_is_independent_of_storage_root() -> None:
+    """powerbi_export_path() builds a path under powerbi_export_root, not storage_root.
+
+    Reason: production storage_root values (dbfs:/..., abfss://...) aren't
+    paths a local BI tool can open, so this must not derive from storage_root
+    the way bronze/silver/gold_table_path do.
+    """
+    settings = LakehouseSettings(storage_root="abfss://lakehouse@example.dfs.core.windows.net")
+    assert settings.powerbi_export_path("fact_catastrophe_event") == (
+        "file:///data/powerbi_export/fact_catastrophe_event"
+    )
+
+
 def test_source_defaults_are_populated() -> None:
     """New ingestion-source settings load with sensible defaults."""
     settings = LakehouseSettings()

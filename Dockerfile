@@ -1,8 +1,7 @@
 # Local Docker simulation of the Databricks Jobs environment (infra/jobs.tf).
 # See docs/architecture_ideal_vs_actual.md's "Local validation (Docker
 # Compose)" section for exactly what is and isn't simulated here -- storage
-# is a plain Docker volume, not real ADLS Gen2 (Azurite emulation was tried
-# and rejected; see that doc section for why); Delta config is injected via
+# is a plain Docker volume, not real ADLS Gen2; Delta config is injected via
 # docker/spark-defaults.conf, not a real Databricks cluster's ambient
 # config; invocation runs from source-mounted code, not the built wheel
 # infra/jobs.tf's python_wheel_task actually uploads and runs.
