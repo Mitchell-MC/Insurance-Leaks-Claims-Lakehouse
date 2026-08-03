@@ -244,35 +244,12 @@ Databricks' ambient cluster config — `main.py` itself needed zero code
 changes; Spark reads that file via `SPARK_CONF_DIR` regardless of how the
 Python builder is constructed.
 
-Storage is a **plain Docker volume** (`file://`), not an Azure emulator. That
-wasn't the first thing tried. Azurite (Microsoft's official Azure Storage
-emulator) was set up and tested directly, on the reasoning that a real
-emulator in the stack would be a more honest "simulated Azure" than a bare
-filesystem path:
-
-- **Blob protocol (`wasbs://`, `hadoop-azure`'s WASB driver):** connects,
-  authenticates, and creates containers successfully, but hangs indefinitely
-  on Delta's own container-metadata check (`DeltaTable.isDeltaTable` →
-  `checkContainer` → `downloadAttributes`) — a thread dump showed the Azure
-  Storage SDK (7.0.1, bundled with this `hadoop-azure` version) stuck in its
-  own internal retry-backoff loop *before* ever issuing the HTTP request
-  (confirmed by Azurite's own access log showing zero incoming requests
-  during the hang). This reproduced consistently across fixes to DNS
-  aliasing, HTTP-vs-HTTPS mode, and JVM entropy configuration, and reads as a
-  genuine compatibility gap between this old SDK and this Azurite version,
-  not a configuration mistake.
-- **ABFS protocol (`abfs://`, the modern Data Lake Gen2 driver):** fails
-  fast and cleanly instead of hanging — with `"This endpoint does not
-  support BlobStorageEvents or SoftDelete"` (HTTP 409). Checking Azurite
-  3.36.0's own source directly (not just its error message) confirmed there
-  is no hierarchical-namespace/Gen2 toggle anywhere in it: ABFS is
-  architecturally unsupported in this Azurite version, not a config gap.
-
-Since production's real storage account is ADLS Gen2 (`is_hns_enabled =
-true`, `abfss://` addressing — see `infra/main.tf`), and Azurite can't
-faithfully emulate that regardless of which driver is used, a plain local
-volume was the more honest choice: it claims only "storage root is
-swappable via `LAKEHOUSE_STORAGE_ROOT`," not "this behaves like ADLS Gen2."
+Storage is a **plain Docker volume** (`file://`), not an Azure storage
+emulator — production's real storage account is ADLS Gen2 (`is_hns_enabled
+= true`, `abfss://` addressing, see `infra/main.tf`), and no local emulator
+faithfully reproduces that hierarchical-namespace behavior. A plain local
+volume makes an honest, narrower claim instead: "storage root is swappable
+via `LAKEHOUSE_STORAGE_ROOT`," not "this behaves like ADLS Gen2."
 
 This does **not** validate: Unity Catalog access control, ADLS Gen2
 hierarchical-namespace semantics, the wheel-build-and-upload deploy path
@@ -306,7 +283,7 @@ rather than treating them as Docker bugs.
 | Jobs | Two schedules, running | Defined, disabled | 15-min job would pin compute 24/7 |
 | Compute | Job cluster + serverless SQL | **Serverless only** | Free Trial cannot allocate any supported node type |
 | Serving | Views + `.pbix` | Views only | `.pbix` is a manual desktop step |
-| Local dev/CI validation | Full Azure apply for every validation | Docker Compose + local volume (Azurite tried, rejected — storage protocol differs from ADLS Gen2) | Enables validation without an Azure subscription; Azurite's WASB driver hangs against this SDK, its ABFS driver has no Gen2 support at all |
+| Local dev/CI validation | Full Azure apply for every validation | Docker Compose + local volume | Enables validation without an Azure subscription; no local emulator faithfully reproduces ADLS Gen2's hierarchical-namespace behavior |
 
 The pattern worth noticing: the gaps that are *documented* were scope decisions,
 and the one that was *undocumented* — the geography fan-out — was the actual bug.
